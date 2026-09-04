@@ -1,0 +1,21 @@
+{
+  "mixed_frequency_formats.csv": {
+    "column": "Singlets/Live/CD4 | Freq. of Parent",
+    "raw_values": ["4.7%", "0.047", "0.04%", "0", "100%"],
+    "valid": true,
+    "formats": ["explicit_percent", "plain_numeric"]
+  },
+  "rare_numeric_frequencies.csv": {
+    "column": "Rare population | Frequency",
+    "raw_values": [0.04, 0.07, 0.2],
+    "valid": true,
+    "formats": ["plain_numeric"],
+    "warning_contains": "proportions or rare percentages"
+  },
+  "invalid_frequency_values.csv": {
+    "column": "Population | Freq. of Live",
+    "raw_values": ["-0.1%", "100.1%", "not measured"],
+    "valid": false,
+    "formats": ["explicit_percent", "non_numeric"]
+  }
+}
