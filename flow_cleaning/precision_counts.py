@@ -10,6 +10,12 @@ class PrecisionCountSettings:
     bead_volume_microlitre: float
     cell_volume_microlitre: float
 
+def concentration_per_microlitre(concentration_per_ml: float) -> float:
+    """Convert a bead concentration from per mL to per µL (1 mL = 1,000 µL)."""
+    if concentration_per_ml < 0:
+        raise ValueError("Bead concentration cannot be negative")
+    return concentration_per_ml / 1000
+
 def detect_bead_count_column(df: pd.DataFrame) -> str | None:
     """Select the first numeric column matching the documented priority rules."""
     numeric = [column for column in df.columns if pd.api.types.is_numeric_dtype(df[column])]

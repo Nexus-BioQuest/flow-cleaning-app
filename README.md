@@ -31,6 +31,14 @@ are preserved as supplied and frequency columns are profiled for explicit
 percentages, plain numbers, mixed representations, invalid values, and
 ambiguous all-below-1 inputs.
 
+The interface follows the operating-system light or dark appearance setting.
+Its custom styling uses paired theme tokens rather than fixed foreground and
+background colours.
+
+Bead concentration is entered once in beads per mL. The sidebar displays beads
+per µL as a live derived value (`per mL ÷ 1,000`), and the same derived value is
+used in precision-count exports.
+
 ## Structure
 
 - `app.py` — minimal Streamlit launcher

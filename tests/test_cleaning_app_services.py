@@ -8,7 +8,8 @@ sys.path.insert(0, str(APP_DIR))
 
 from flow_cleaning.gate_mapping import OUTPUT_COLUMNS, generate_gate_mapping
 from flow_cleaning.master_export import build_master_workbook
-from flow_cleaning.precision_counts import PrecisionCountSettings, create_precision_count_table, detect_bead_count_column
+from flow_cleaning.precision_counts import (PrecisionCountSettings, concentration_per_microlitre,
+                                             create_precision_count_table, detect_bead_count_column)
 
 def test_gate_mapping_preserves_export_schema_and_case_deduplication():
     gate = "Singlets/Scatter/Live/CD4-/Total_B_Cells | Freq. of Parent"
@@ -42,3 +43,7 @@ def test_precision_count_schema_is_unchanged():
     assert list(table.columns) == ["sample_name", "bead_conc_per_ml", "beads_per_microlitre",
         "bead_vol_microlitre", "bead_count", "cell_vol_microlitre", "precision_count_beads"]
     assert table.loc[0, "bead_count"] == 50000
+
+def test_beads_per_microlitre_is_derived_from_per_ml_concentration():
+    assert concentration_per_microlitre(1_000_000) == 1_000
+    assert concentration_per_microlitre(2_500_000) == 2_500

@@ -25,7 +25,8 @@ from flow_cleaning.validation import DataValidator
 from flow_cleaning.gate_mapping import generate_gate_mapping
 from flow_cleaning.master_export import build_master_workbook
 from flow_cleaning.precision_counts import (PrecisionCountSettings, create_precision_count_table,
-                              detect_bead_count_column, filter_summary_rows)
+                              concentration_per_microlitre, detect_bead_count_column,
+                              filter_summary_rows)
 from flow_cleaning.ui.metadata_tab import render as render_metadata_tab
 
 
@@ -280,8 +281,28 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    :root { --ink:#172033; --muted:#667085; --line:#e4e7ec; --accent:#315b8a; --surface:#f8fafc; }
-    .stApp { background: #ffffff; color: var(--ink); }
+    :root {
+        color-scheme: light dark;
+        --app-bg: #ffffff;
+        --surface: #f8fafc;
+        --surface-raised: #ffffff;
+        --ink: #172033;
+        --muted: #667085;
+        --line: #e4e7ec;
+        --accent: #315b8a;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --app-bg: #0e1117;
+            --surface: #151a23;
+            --surface-raised: #1b2230;
+            --ink: #f2f4f7;
+            --muted: #aeb7c6;
+            --line: #30394a;
+            --accent: #78a9df;
+        }
+    }
+    .stApp { background: var(--app-bg); color: var(--ink); }
     .block-container { max-width: 1320px; padding-top: 2.5rem; padding-bottom: 4rem; }
     h1, h2, h3 { color: var(--ink); letter-spacing: -0.025em; }
     h1 { font-size: 2.15rem !important; font-weight: 650 !important; }
@@ -289,14 +310,15 @@ st.markdown("""
     h3 { font-size: 1.1rem !important; font-weight: 620 !important; }
     [data-testid="stSidebar"] { background: var(--surface); border-right: 1px solid var(--line); }
     [data-testid="stSidebar"] h1 { font-size: 1.2rem !important; }
-    [data-testid="stMetric"] { background:#fff; border:1px solid var(--line); border-radius:8px; padding:1rem; }
-    [data-testid="stMetricLabel"] { color:var(--muted); }
+    [data-testid="stMetric"] { background:var(--surface-raised); border:1px solid var(--line); border-radius:8px; padding:1rem; }
+    [data-testid="stMetricLabel"], [data-testid="stCaptionContainer"] { color:var(--muted); }
     .stTabs [data-baseweb="tab-list"] { gap:1.5rem; border-bottom:1px solid var(--line); }
     .stTabs [data-baseweb="tab"] { padding:.75rem .1rem; font-weight:550; color:var(--muted); }
     .stTabs [aria-selected="true"] { color:var(--accent) !important; }
     .stButton > button, .stDownloadButton > button { border-radius:7px; font-weight:600; }
     .stAlert { border-radius:7px; border-width:1px; }
     hr { border-color:var(--line) !important; }
+    code, pre { color:var(--ink) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -370,18 +392,16 @@ st.sidebar.header("Precision count defaults")
 st.sidebar.caption("Applied to all samples unless overridden.")
 
 default_bead_conc = st.sidebar.number_input(
-    "Bead Concentration (per ml)",
+    "Bead concentration (per mL)",
+    min_value=0.0,
     value=1.00e6,
     format="%.2e",
     help="Default: 1.00E+06"
 )
 
-default_beads_per_ul = st.sidebar.number_input(
-    "Beads per Microlitre",
-    value=1.00e3,
-    format="%.2e",
-    help="Default: 1.00E+03"
-)
+default_beads_per_ul = concentration_per_microlitre(default_bead_conc)
+st.sidebar.metric("Calculated beads per µL", f"{default_beads_per_ul:,.2f}")
+st.sidebar.caption("Calculated as concentration per mL ÷ 1,000.")
 
 default_bead_vol = st.sidebar.number_input(
     "Bead Volume (µL)",
