@@ -390,13 +390,15 @@ st.sidebar.divider()
 # Default values
 st.sidebar.header("Precision count defaults")
 st.sidebar.caption("Applied to all samples unless overridden.")
+defaults_locked = st.session_state.defaults_set
 
 default_bead_conc = st.sidebar.number_input(
     "Bead concentration (per mL)",
     min_value=0.0,
     value=1.00e6,
     format="%.2e",
-    help="Default: 1.00E+06"
+    help="Default: 1.00E+06",
+    disabled=defaults_locked,
 )
 
 default_beads_per_ul = concentration_per_microlitre(default_bead_conc)
@@ -407,21 +409,23 @@ default_bead_vol = st.sidebar.number_input(
     "Bead Volume (µL)",
     value=50,
     step=5,
-    help="Default: 50 µL"
+    help="Default: 50 µL",
+    disabled=defaults_locked,
 )
 
 default_cell_vol = st.sidebar.number_input(
     "Cell Volume (µL)",
     value=150,
     step=10,
-    help="Default: 150 µL"
+    help="Default: 150 µL",
+    disabled=defaults_locked,
 )
 
-if st.sidebar.button("Lock defaults", type="primary"):
-    st.session_state.defaults_set = True
-    st.sidebar.success("✓ Defaults locked!")
-
-if st.session_state.defaults_set:
+if not defaults_locked:
+    if st.sidebar.button("Lock defaults", type="primary"):
+        st.session_state.defaults_set = True
+        st.rerun()
+else:
     st.sidebar.success("Defaults locked")
     if st.sidebar.button("Unlock defaults"):
         st.session_state.defaults_set = False
