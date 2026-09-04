@@ -10,7 +10,7 @@
     "raw_values": [0.04, 0.07, 0.2],
     "valid": true,
     "formats": ["plain_numeric"],
-    "warning_contains": "proportions or rare percentages"
+    "warning_contains": "Every non-missing frequency value across the dataset"
   },
   "invalid_frequency_values.csv": {
     "column": "Population | Freq. of Live",

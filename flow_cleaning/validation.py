@@ -76,7 +76,7 @@ class DataValidator:
         
         if cleaning_validation["samples_lost"] > 0:
             validation["warnings"].append(
-                f"⚠️ {cleaning_validation['samples_lost']} total samples removed during cleaning in {day_label}"
+                f"{cleaning_validation['samples_lost']} total samples removed during cleaning in {day_label}"
             )
         
         validation["recommendations"].extend(cleaning_validation["recommendations"])
@@ -141,7 +141,7 @@ class DataValidator:
                 }
                 
                 result["issues"].append(
-                    f"📄 Column mismatch in '{filename}': "
+                    f"Column mismatch in '{filename}': "
                     f"{len(only_in_ref)} missing, {len(only_in_file)} extra"
                 )
             
@@ -164,18 +164,18 @@ class DataValidator:
         # Generate recommendations
         if result["consistent"] and not result["case_differences"]:
             result["recommendations"].append(
-                f"✅ All {len(file_dfs)} files in {day_label} have identical columns"
+                f"All {len(file_dfs)} files in {day_label} have identical columns"
             )
         elif result["consistent"] and result["case_differences"]:
             result["recommendations"].append(
-                f"✅ All {len(file_dfs)} files in {day_label} have matching columns (case-insensitive)"
+                f"All {len(file_dfs)} files in {day_label} have matching columns (case-insensitive)"
             )
             result["warnings"].append(
-                f"🔤 {len(result['case_differences'])} files have case differences that will be standardized"
+                f"{len(result['case_differences'])} files have case differences that will be standardized"
             )
         else:
             result["recommendations"].append(
-                f"⚠️ Files in {day_label} have different column structures. "
+                f"Files in {day_label} have different column structures. "
                 f"Check your FlowJo gating and export settings."
             )
         
@@ -225,6 +225,7 @@ class DataValidator:
         result = {
             "valid": True,
             "frequency_columns": frequency_columns,
+            "all_plain_numeric_between_zero_and_one": False,
             "issues": [],
             "warnings": [],
             "recommendations": [],
@@ -257,18 +258,20 @@ class DataValidator:
                     f"Column '{col}' contains {int(non_numeric.sum())} non-numeric frequency values."
                 )
 
-            if numeric.dropna().empty:
-                continue
-
             col_min = numeric.min(skipna=True)
             col_max = numeric.max(skipna=True)
             result["details"][col] = {
-                "min": float(col_min), "max": float(col_max),
+                "min": float(col_min) if pd.notna(col_min) else None,
+                "max": float(col_max) if pd.notna(col_max) else None,
                 "input_formats": formats,
                 "explicit_percent_values": int(explicit_percent.sum()),
                 "plain_numeric_values": int(plain_numeric.sum()),
+                "non_numeric_values": int(non_numeric.sum()),
                 "missing_values": int(series.isna().sum()),
             }
+
+            if numeric.dropna().empty:
+                continue
 
             if explicit_percent.any() and plain_numeric.any():
                 result["warnings"].append(
@@ -278,11 +281,7 @@ class DataValidator:
                 result["warnings"].append(
                     f"Column '{col}' uses explicit % strings. Values were preserved unchanged."
                 )
-            elif col_max <= 1:
-                result["warnings"].append(
-                    f"Column '{col}' contains only plain numeric values at or below 1. These may be proportions or rare percentages; no scale was inferred and no values were changed."
-                )
-            else:
+            elif col_max > 1:
                 result["warnings"].append(
                     f"Column '{col}' uses plain numeric values spanning up to {col_max:g}. Values were preserved unchanged."
                 )
@@ -293,6 +292,21 @@ class DataValidator:
                     f"Column '{col}' has values outside the allowed frequency range 0-100: {col_min}..{col_max}."
                 )
                 continue
+
+        populated_details = [item for item in result["details"].values()
+                             if item.get("min") is not None and item.get("max") is not None]
+        all_frequency_values_are_small_plain_numbers = bool(populated_details) and all(
+            item.get("input_formats") == ["plain_numeric"]
+            and item["min"] >= 0
+            and item["max"] <= 1
+            for item in populated_details
+        ) and len(populated_details) == len(frequency_columns)
+        result["all_plain_numeric_between_zero_and_one"] = all_frequency_values_are_small_plain_numbers
+        if all_frequency_values_are_small_plain_numbers:
+            result["warnings"].append(
+                "Every non-missing frequency value across the dataset is a plain number between 0 and 1. "
+                "Confirm whether the export uses proportions or percentages; no values were changed."
+            )
 
         if result["issues"]:
             result["valid"] = False
@@ -343,7 +357,7 @@ class DataValidator:
         
         for filename, _, cleaned_df in file_dfs:
             if 'sample_name' not in cleaned_df.columns:
-                result["warnings"].append(f"⚠️ No 'sample_name' column in '{filename}'")
+                result["warnings"].append(f"No 'sample_name' column in '{filename}'")
                 continue
             
             samples = cleaned_df['sample_name'].dropna().astype(str).tolist()
@@ -366,14 +380,14 @@ class DataValidator:
                     if sample in samples
                 ]
                 result["warnings"].append(
-                    f"⚠️ Sample '{sample}' appears in {count} files: {', '.join(files_with_sample)}"
+                    f"Sample '{sample}' appears in {count} files: {', '.join(files_with_sample)}"
                 )
             
             if len(duplicates) > 5:
-                result["warnings"].append(f"⚠️ ...and {len(duplicates) - 5} more duplicates")
+                result["warnings"].append(f"...and {len(duplicates) - 5} more duplicates")
             
             result["recommendations"].append(
-                f"⚠️ {len(duplicates)} samples appear in multiple files in {day_label}. "
+                f"{len(duplicates)} samples appear in multiple files in {day_label}. "
                 "This may cause issues during merging. Ensure each sample is only in one file."
             )
         
@@ -385,7 +399,7 @@ class DataValidator:
         
         if result["consistent"]:
             result["recommendations"].append(
-                f"✅ No duplicate samples across {len(file_dfs)} files in {day_label} "
+                f"No duplicate samples across {len(file_dfs)} files in {day_label} "
                 f"({result['total_unique_samples']} unique samples)"
             )
         
@@ -427,7 +441,7 @@ class DataValidator:
                 
                 if lost_samples:
                     result["recommendations"].append(
-                        f"📄 '{filename}': {len(lost_samples)} samples removed during cleaning: "
+                        f"'{filename}': {len(lost_samples)} samples removed during cleaning: "
                         f"{', '.join(list(lost_samples)[:3])}" + 
                         (f"... and {len(lost_samples)-3} more" if len(lost_samples) > 3 else "")
                     )
@@ -438,11 +452,11 @@ class DataValidator:
         # Summary recommendation
         if result["samples_lost"] == 0:
             result["recommendations"].append(
-                f"✅ No samples lost during cleaning in {day_label}"
+                f"No samples lost during cleaning in {day_label}"
             )
         else:
             result["recommendations"].append(
-                f"⚠️ Total samples removed in {day_label}: {result['samples_lost']} "
+                f"Total samples removed in {day_label}: {result['samples_lost']} "
                 f"(check if these are expected FMO/control samples)"
             )
         
@@ -453,25 +467,25 @@ class DataValidator:
         """Display pre-merge validation results in Streamlit."""
         day = validation.get("day", "Unknown")
         
-        st.subheader(f"📋 Pre-Merge Validation: {day}")
+        st.subheader(f"Pre-Merge Validation: {day}")
         st.caption(f"Checking {validation.get('file_count', 0)} individual files before merging")
         
         # Overall status
         if validation.get("valid", False):
-            st.success(f"✅ All files in {day} are ready to merge")
+            st.success(f"All files in {day} are ready to merge")
         else:
-            st.error(f"❌ Issues detected in {day} files")
+            st.error(f"Issues detected in {day} files")
         
         # Create tabs for different checks
-        tab1, tab2, tab3 = st.tabs(["📊 Column Structure", "🏷️ Sample Names", "🧹 Cleaning Effects"])
+        tab1, tab2, tab3 = st.tabs(["Column Structure", "Sample Names", "Cleaning Effects"])
         
         with tab1:
             col_val = validation.get("column_consistency", {})
             
             if col_val.get("consistent", True):
-                st.success(f"✅ All columns match across files")
+                st.success(f"All columns match across files")
             else:
-                st.error(f"❌ Column structure varies between files")
+                st.error(f"Column structure varies between files")
             
             st.metric("Common Columns", len(col_val.get("common_columns", [])))
             
@@ -479,7 +493,7 @@ class DataValidator:
             if col_val.get("column_differences"):
                 st.warning("**Column Differences Detected:**")
                 for filename, diffs in col_val["column_differences"].items():
-                    with st.expander(f"📄 {filename}"):
+                    with st.expander(f"{filename}"):
                         if diffs["only_in_reference"]:
                             st.write("**Missing columns:**", ", ".join(sorted(diffs["only_in_reference"])))
                         if diffs["only_in_this_file"]:
@@ -487,7 +501,7 @@ class DataValidator:
             
             # Show case differences
             if col_val.get("case_differences"):
-                with st.expander(f"🔤 Case Differences ({len(col_val['case_differences'])} files)"):
+                with st.expander(f"Case Differences ({len(col_val['case_differences'])} files)"):
                     for filename, cases in col_val["case_differences"].items():
                         st.write(f"**{filename}:**")
                         for case in cases[:5]:  # Show first 5
@@ -527,7 +541,7 @@ class DataValidator:
             if clean_val.get("file_effects"):
                 st.write("**Cleaning effects per file:**")
                 for filename, effect in clean_val["file_effects"].items():
-                    with st.expander(f"📄 {filename}"):
+                    with st.expander(f"{filename}"):
                         st.write(f"Raw rows: {effect['raw_rows']} → Cleaned rows: {effect['cleaned_rows']}")
                         if 'samples_lost' in effect and effect['samples_lost'] > 0:
                             st.warning(f"**{effect['samples_lost']} samples removed:**")
@@ -599,36 +613,36 @@ class DataValidator:
         if validation["only_in_day_0"] or validation["only_in_day_7"]:
             validation["valid"] = False
             validation["recommendations"].append(
-                "⚠️ Column names don't match between Day 0 and Day 7 (case-insensitive). "
+                "Column names don't match between Day 0 and Day 7 (case-insensitive). "
                 "Check your FlowJo exports for consistent gating."
             )
             
             if validation["only_in_day_0"]:
                 validation["recommendations"].append(
-                    f"❌ {len(validation['only_in_day_0'])} columns only in Day 0: "
+                    f"{len(validation['only_in_day_0'])} columns only in Day 0: "
                     f"{', '.join(sorted(list(validation['only_in_day_0'])[:3]))}..."
                 )
             
             if validation["only_in_day_7"]:
                 validation["recommendations"].append(
-                    f"❌ {len(validation['only_in_day_7'])} columns only in Day 7: "
+                    f"{len(validation['only_in_day_7'])} columns only in Day 7: "
                     f"{', '.join(sorted(list(validation['only_in_day_7'])[:3]))}..."
                 )
         
         if validation["case_mismatches"]:
             validation["recommendations"].append(
-                f"🔤 {len(validation['case_mismatches'])} columns have different capitalization. "
+                f"{len(validation['case_mismatches'])} columns have different capitalization. "
                 "These will be standardized to Day 0 casing in the merged export."
             )
         
         # Success message
         if validation["valid"] and not validation["case_mismatches"]:
             validation["recommendations"].append(
-                "✅ Perfect match! All columns are identical (including case)."
+                "All columns are identical, including letter case."
             )
         elif validation["valid"] and validation["case_mismatches"]:
             validation["recommendations"].append(
-                "✅ All columns match (case-insensitive). Minor case differences will be auto-corrected."
+                "All columns match (case-insensitive). Minor case differences will be auto-corrected."
             )
         
         return validation
@@ -659,7 +673,7 @@ class DataValidator:
         
         if rename_map:
             day_7_standardized = day_7_standardized.rename(columns=rename_map)
-            st.info(f"🔤 Standardized {len(rename_map)} Day 7 column names to match Day 0 casing")
+            st.info(f"Standardized {len(rename_map)} Day 7 column names to match Day 0 casing")
         
         return day_7_standardized
     
@@ -806,21 +820,21 @@ class DataValidator:
         st.subheader(title)
         
         if validation.get("valid", False):
-            st.success("✅ All validation checks passed!")
+            st.success("All validation checks passed.")
         else:
-            st.error("❌ Validation issues detected")
+            st.error("Validation issues detected")
         
         # Display issues
         if validation.get("issues"):
             st.error("**Issues:**")
             for issue in validation["issues"]:
-                st.markdown(f"- ❌ {issue}")
+                st.markdown(f"- {issue}")
         
         # Display warnings
         if validation.get("warnings"):
             st.warning("**Warnings:**")
             for warning in validation["warnings"]:
-                st.markdown(f"- ⚠️ {warning}")
+                st.markdown(f"- {warning}")
         
         return validation.get("valid", False)
     
@@ -848,9 +862,9 @@ class DataValidator:
             all_valid = False
         
         if all_valid:
-            report_lines.append("✅ **All validation checks passed!**")
+            report_lines.append("**All validation checks passed.**")
         else:
-            report_lines.append("❌ **Validation issues detected - see details below**")
+            report_lines.append("**Validation issues detected - see details below**")
         
         report_lines.append("")
         

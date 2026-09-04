@@ -17,10 +17,9 @@ def mapping_tree_frame(mapping: pd.DataFrame) -> pd.DataFrame:
         metric = row.get("metric", parsed_metric)
         item.update({"Metric": parsed_metric if pd.isna(metric) or metric == "" else metric,
             "Gating Name": row.get("gating_name", ""), "Plot Name": row.get("plot_name", ""),
-            "Subset": row.get("subset", ""), "Cell Lineage": row.get("cell_lineage", ""),
-            "Cell Subset": row.get("cell_subset", ""), "For Graphing": row.get("for_graphing", True)})
+            "For Graphing": row.get("for_graphing", True)})
         rows.append(item)
-    columns = [f"Level {i + 1}" for i in range(depth)] + ["Metric", "Gating Name", "Plot Name", "Subset", "Cell Lineage", "Cell Subset", "For Graphing"]
+    columns = [f"Level {i + 1}" for i in range(depth)] + ["Metric", "Gating Name", "Plot Name", "For Graphing"]
     return pd.DataFrame(rows, columns=columns)
 
 def normalize_lineage(value: str) -> str:

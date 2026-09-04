@@ -222,6 +222,19 @@ class SmartGateNamer:
         """
         # Clean the gate name (just the last part)
         gate_name_clean = gate_name.split('/')[-1] if '/' in gate_name else gate_name
+
+        # Accept common FlowJo/user variants such as CD86 positive, CD86_pos,
+        # CD86pos and CD86⁺ without maintaining an exhaustive marker list.
+        generic = re.fullmatch(
+            r'\s*([A-Za-z][A-Za-z0-9_-]*?)\s*(?:[_\s-]*(pos(?:itive)?|neg(?:ative)?)|([+\-⁺⁻]))\s*',
+            gate_name_clean,
+            flags=re.IGNORECASE,
+        )
+        if generic:
+            marker = self._canonical_marker(generic.group(1))
+            status = generic.group(2) or generic.group(3)
+            sign = '+' if str(status).lower().startswith('pos') or status in {'+', '⁺'} else '-'
+            return f"{marker}{sign}"
         
         for marker_key, marker_display in self.marker_map.items():
             # Special handling for CD19 to avoid false matches with "Total_B-cells_CD20-CD19"
@@ -244,8 +257,49 @@ class SmartGateNamer:
                     return base_marker
         return None
 
+    @staticmethod
+    def _canonical_marker(value: str) -> str:
+        """Normalize spelling without changing the identity of an unknown marker."""
+        compact = re.sub(r'[\s_]+', '', str(value)).replace('–', '-').replace('−', '-')
+        aliases = {
+            'pd1': 'PD-1', 'pd-1': 'PD-1', 'ctla4': 'CTLA4', 'ctla-4': 'CTLA4',
+            'lilbr1': 'LILRB1', 'lilrb1': 'LILRB1', 'hladr': 'HLA-DR',
+            'hla-dr': 'HLA-DR', 'ox40l': 'OX40L', 'ox40': 'OX40',
+        }
+        lower = compact.lower()
+        if lower in aliases:
+            return aliases[lower]
+        match = re.fullmatch(r'cd(\d+)([a-z]?)', lower)
+        if match:
+            return f"CD{match.group(1)}{match.group(2)}"
+        match = re.fullmatch(r'(cxcr|ccr)(\d+)', lower)
+        if match:
+            return f"{match.group(1).upper()}{match.group(2)}"
+        if re.fullmatch(r'ig[admeg]', lower):
+            return f"Ig{lower[-1].upper()}"
+        return compact
+
+    @staticmethod
+    def _canonical_metric(metric: str) -> str:
+        text = re.sub(r'\s+', ' ', str(metric or '')).strip()
+        normalized = re.sub(r'[^a-z0-9]+', ' ', text.casefold()).strip()
+        if normalized in {'count', 'counts', 'event count', 'event counts'}:
+            return 'Count'
+        if re.match(r'^(freq|frequency)( of)? grand ?parent', normalized):
+            return 'Freq. of Grandparent'
+        if re.match(r'^(freq|frequency)( of)? parent', normalized):
+            return 'Freq. of Parent'
+        if re.match(r'^(freq|frequency)( of)? live( cd45( positive| pos)?)?', normalized):
+            return 'Freq. of Live CD45+' if 'cd45' in normalized else 'Freq. of Live'
+        if normalized.startswith(('median ', 'mfi ')):
+            channel = re.search(r'\(([^)]+)\)', text)
+            return f"Median ({channel.group(1).strip()})" if channel else text
+        return text
+
     def generate_name(self, gate_path: str, metric: str) -> str:
         """Main name generator"""
+        gate_path = str(gate_path or '').strip().strip('/')
+        metric = self._canonical_metric(metric)
         if gate_path in self.special_cases:
             return self.special_cases[gate_path]
         if gate_path == 'Singlets/Scatter/Live' and metric == 'Freq. of Parent':
@@ -489,17 +543,21 @@ class SmartGateNamer:
 
         if match:
             fluorophore = match.group(1).strip()
+            marker_match = re.search(
+                r'(CD\s*\d{1,3}[a-z]?|PD[-_ ]?1|LILR[AB]\s*\d+|CXCR\s*\d+|CCR\s*\d+|HLA[-_ ]?DR|ICOS|CTLA[-_ ]?4|OX40L?|Ig[ADMEG])',
+                fluorophore,
+                flags=re.IGNORECASE,
+            )
             if 'LILBR1' in fluorophore or 'LILRB1' in fluorophore:
                 marker = 'LILRB1'
-            elif 'CD' in fluorophore:
-                # Extract CD followed by digits, optionally followed by lowercase letter(s)
-                cd_match = re.search(r'(CD\d{1,3}[a-z]*)', fluorophore)
-                marker = cd_match.group(1) if cd_match else fluorophore.split('_')[0].split('-')[-1]
+            elif marker_match:
+                marker = self._canonical_marker(marker_match.group(1))
             else:
-                marker = self.fluorophore_map.get(
-                    fluorophore,
-                    fluorophore.split('_')[0].split('-')[-1]
-                )
+                compact = re.sub(r'[^a-z0-9]', '', fluorophore.casefold())
+                marker = next((value for key, value in self.fluorophore_map.items()
+                               if re.sub(r'[^a-z0-9]', '', key.casefold()) == compact), None)
+                # A dye-only channel cannot be mapped biologically with confidence.
+                marker = marker or re.sub(r'^(comp[-_ ]*)', '', fluorophore, flags=re.IGNORECASE)
         else:
             marker = "Unknown"
 
@@ -698,7 +756,8 @@ class SmartGateNamer:
             'CD4', 'CD8', 'CD3', 'CD19', 'CD20', 'CD38', 'CD86', 'CD267',
             'CD11c', 'LILRB1', 'CXCR5', 'Tfh', 'GC-Tfh','mTfh','TfH', 'Tconv', 'IgD', 'IgM', 'IgG',
             'CD4-', 'CD8-', 'CD8','CD3-', 'CD19-', 'CD20-', 'Pre-GC', 'CD4+ TEM', 'CD8+ TEM',
-            'OX40', 'OX40L', 'PD-1', 'PD1', 'CTLA4','OX40l','OX40l+', 'OX40L+', 'OX40L_pos'
+            'OX40', 'OX40L', 'PD-1', 'PD1', 'CTLA4', 'HLA-DR',
+            'OX40l','OX40l+', 'OX40L+', 'OX40L_pos'
         }
         
         # Small words that should stay lowercase (unless first word)
@@ -742,6 +801,9 @@ class SmartGateNamer:
             
             # Check if word should be preserved as-is
             if word in preserve_words:
+                result.append(word)
+            # Preserve user-supplied marker spelling and all-capital channel names.
+            elif word.endswith(('+', '-')) or re.fullmatch(r'[A-Z0-9]+(?:-[A-Z0-9]+)+', word):
                 result.append(word)
             # Check if word starts with preserved abbreviation
             elif any(word.startswith(abbr) for abbr in preserve_words):
@@ -819,7 +881,7 @@ def create_gate_name_mapping(df: pd.DataFrame,
     unique_count = result_df['plot_name'].nunique()
     
     if original_count != unique_count:
-        print(f"✓ Deduplicated: {original_count} original combinations → {unique_count} unique plot names")
+        print(f"Deduplicated: {original_count} original combinations → {unique_count} unique plot names")
     
     return result_df
 
@@ -835,7 +897,7 @@ if __name__ == "__main__":
         ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Pre_GC/GC/proliferating/CD38+", "Freq. of Grandparent"),
     ]
     
-    print("🧪 Testing Gate Naming Including Freq. of Grandparent")
+    print("Testing gate naming including frequency of grandparent")
     print("=" * 80)
     
     for gate_path, metric in test_cases:

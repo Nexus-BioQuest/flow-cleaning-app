@@ -82,12 +82,12 @@ class FlowDataCleaner:
             df = df.drop(columns=to_remove)
             
             file_msg = f" in {filename}" if filename else ""
-            st.warning(f"⚠️ Removed {len(to_remove)} duplicate column(s) with matching values{file_msg}")
+            st.warning(f"Removed {len(to_remove)} duplicate column(s) with matching values{file_msg}")
             
-            with st.expander(f"📋 View {len(removed_info)} removed column(s)"):
+            with st.expander(f"View {len(removed_info)} removed column(s)"):
                 for base_col, dup_col in removed_info:
-                    st.text(f"✓ Kept: {base_col}")
-                    st.text(f"  ✗ Removed: {dup_col}")
+                    st.text(f"Kept: {base_col}")
+                    st.text(f"  Removed: {dup_col}")
         
         return df
         
@@ -116,7 +116,7 @@ class FlowDataCleaner:
         
         if rename_map:
             df = df.rename(columns=rename_map)
-            st.info(f"   🔤 Standardized {len(rename_map)} column names to canonical casing")
+            st.info(f"   Standardized {len(rename_map)} column names to canonical casing")
         
         return df
     
@@ -171,10 +171,10 @@ class FlowDataCleaner:
                 df = self.remove_duplicate_columns(df, filename=uploaded_file.name)
                 
                 dfs[uploaded_file.name] = df
-                st.success(f"✓ Loaded {uploaded_file.name}: {df.shape[0]} rows, {df.shape[1]} columns")
+                st.success(f"Loaded {uploaded_file.name}: {df.shape[0]} rows, {df.shape[1]} columns")
 
             except Exception as e:
-                st.error(f"✗ Error loading {uploaded_file.name}: {str(e)}")
+                st.error(f"Error loading {uploaded_file.name}: {str(e)}")
                 continue
         
         self.loaded_files = dfs
@@ -197,7 +197,7 @@ class FlowDataCleaner:
             old_name = first_col
             df.rename(columns={first_col: 'sample_name'}, inplace=True)
             if filename:
-                st.info(f"✏️ Renamed '{old_name}' → 'sample_name' in {filename}")
+                st.info(f"Renamed '{old_name}' → 'sample_name' in {filename}")
             return df
         
         # Check for 'name' or 'sample_name' column (case-insensitive)
@@ -207,7 +207,7 @@ class FlowDataCleaner:
                 old_name = col
                 df.rename(columns={col: 'sample_name'}, inplace=True)
                 if filename:
-                    st.info(f"✏️ Renamed '{old_name}' → 'sample_name' in {filename}")
+                    st.info(f"Renamed '{old_name}' → 'sample_name' in {filename}")
                 return df
         
         # Check if already has sample_name (any case)
@@ -219,7 +219,7 @@ class FlowDataCleaner:
             return df
         
         # No sample name column found
-        st.warning(f"⚠️ No sample name column detected in {filename}. First column will be used.")
+        st.warning(f"No sample name column detected in {filename}. First column will be used.")
         df.rename(columns={df.columns[0]: 'sample_name'}, inplace=True)
         
         return df
@@ -244,7 +244,7 @@ class FlowDataCleaner:
             DataFrame with cleaned sample names
         """
         if 'sample_name' not in df.columns:
-            st.warning("⚠️ No sample_name column found - skipping name cleaning")
+            st.warning("No sample_name column found - skipping name cleaning")
             return df
         
         if method == 'none':
@@ -261,7 +261,7 @@ class FlowDataCleaner:
             separator = '_'
             skip_parts = 2
             method = 'separator'
-            st.info(f"🧹 Using preset cleaning for 'DonorX*_B2_' format")
+            st.info(f"Using preset cleaning for 'DonorX*_B2_' format")
         
         if method == 'separator':
             def clean_with_separator(name):
@@ -274,18 +274,18 @@ class FlowDataCleaner:
                     return name
             
             df['sample_name'] = original_names.apply(clean_with_separator)
-            st.success(f"✓ Cleaned using separator '{separator}', skipping first {skip_parts} parts")
+            st.success(f"Cleaned using separator '{separator}', skipping first {skip_parts} parts")
             
         elif method == 'regex':
             if not regex_pattern:
-                st.warning("⚠️ No regex pattern provided")
+                st.warning("No regex pattern provided")
                 return df
             
             try:
                 df['sample_name'] = original_names.str.replace(regex_pattern, '', regex=True)
-                st.success(f"✓ Cleaned using regex pattern: {regex_pattern}")
+                st.success(f"Cleaned using regex pattern: {regex_pattern}")
             except Exception as e:
-                st.error(f"✗ Regex error: {str(e)}")
+                st.error(f"Regex error: {str(e)}")
                 return df
         
         # Show examples after cleaning
@@ -295,7 +295,7 @@ class FlowDataCleaner:
         changes = (original_names != cleaned_names).sum()
         
         if changes > 0:
-            with st.expander(f"👀 View cleaning results ({changes} names changed)"):
+            with st.expander(f"View cleaning results ({changes} names changed)"):
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("**Before:**")
@@ -325,7 +325,7 @@ class FlowDataCleaner:
         
         changes = (before != df['sample_name']).sum()
         if changes > 0:
-            st.success(f"✓ Removed .fcs extension from {changes} sample names")
+            st.success(f"Removed .fcs extension from {changes} sample names")
         
         return df
     
@@ -334,7 +334,7 @@ class FlowDataCleaner:
         Remove FMO (Fluorescence Minus One) control samples.
         """
         if 'sample_name' not in df.columns:
-            st.warning("⚠️ No sample_name column to filter FMO samples")
+            st.warning("No sample_name column to filter FMO samples")
             return df
         
         df = df.copy()
@@ -345,9 +345,9 @@ class FlowDataCleaner:
         
         removed = before_count - len(df)
         if removed > 0:
-            st.success(f"✓ Removed {removed} FMO samples")
+            st.success(f"Removed {removed} FMO samples")
         else:
-            st.info("ℹ️ No FMO samples found")
+            st.info("No FMO samples found")
         
         return df
     
@@ -571,7 +571,7 @@ class FlowDataCleaner:
         if len(dfs) == 1:
             return list(dfs.values())[0].copy()
 
-        st.info(f"🔗 Feature merge: joining {len(dfs)} files by sample_name (column-wise)...")
+        st.info(f"Feature merge: joining {len(dfs)} files by sample_name (column-wise)...")
 
         file_names = list(dfs.keys())
         merged = None
@@ -601,7 +601,7 @@ class FlowDataCleaner:
             if collisions:
                 stem = Path(fname).stem
                 st.warning(
-                    f"⚠️ {len(collisions)} column(s) from **{fname}** already exist — "
+                    f"{len(collisions)} column(s) from **{fname}** already exist — "
                     f"suffixing with `_{stem}`"
                 )
                 df_copy = df_copy.rename(
@@ -609,10 +609,94 @@ class FlowDataCleaner:
                 )
 
             merged = pd.merge(merged, df_copy, on='sample_name', how='outer')
-            st.success(f"  ✓ Joined {fname}: result is {merged.shape[0]} rows × {merged.shape[1]} columns")
+            st.success(f"  Joined {fname}: result is {merged.shape[0]} rows × {merged.shape[1]} columns")
 
-        st.success(f"✅ Feature merge complete: {merged.shape[0]} rows × {merged.shape[1]} columns")
+        st.success(f"Feature merge complete: {merged.shape[0]} rows × {merged.shape[1]} columns")
         return merged
+
+    @staticmethod
+    def _column_identity(value: str) -> str:
+        """Canonical comparison key tolerant of case and accidental spacing."""
+        return re.sub(r'\s+', ' ', str(value).replace('\ufeff', '').strip()).casefold()
+
+    @staticmethod
+    def _values_equivalent(left, right) -> bool:
+        if pd.isna(left) and pd.isna(right):
+            return True
+        if pd.isna(left) or pd.isna(right):
+            return False
+        try:
+            return bool(np.isclose(float(left), float(right), rtol=1e-9, atol=0, equal_nan=True))
+        except (TypeError, ValueError):
+            return str(left).strip() == str(right).strip()
+
+    def merge_random_chunks(self, dfs: Dict[str, pd.DataFrame],
+                            canonical_map: Optional[Dict[str, str]] = None) -> Tuple[pd.DataFrame, List[Dict]]:
+        """Reconcile arbitrary row/column chunks into one row per sample.
+
+        Empty cells complement one another, repeated equal cells are deduplicated,
+        and genuinely conflicting cells are retained in an audit list. The first
+        encountered value remains in the main table so conflicts are never resolved
+        silently or by an unreliable magnitude rule.
+        """
+        canonical_names = dict(canonical_map or {})
+        column_order = []
+        prepared = {}
+        for filename, frame in dfs.items():
+            current = frame.copy()
+            column_specs = []
+            sample_position = None
+            for position, column in enumerate(current.columns):
+                key = self._column_identity(column)
+                if key == self._column_identity(self.merge_key):
+                    canonical = self.merge_key
+                    if sample_position is None:
+                        sample_position = position
+                else:
+                    canonical = canonical_names.setdefault(key, re.sub(r'\s+', ' ', str(column).strip()))
+                    column_specs.append((position, canonical))
+                if canonical != self.merge_key and canonical not in column_order:
+                    column_order.append(canonical)
+            prepared[filename] = (current, sample_position, column_specs)
+
+        cells = {}
+        sample_order = []
+        conflicts = []
+        for filename, (frame, sample_position, column_specs) in prepared.items():
+            if sample_position is None:
+                raise ValueError(f"{filename} has no sample-name column")
+            for row_number, row in frame.iterrows():
+                raw_sample = row.iloc[sample_position]
+                if pd.isna(raw_sample) or not str(raw_sample).strip():
+                    continue
+                sample = str(raw_sample).strip()
+                if sample not in sample_order:
+                    sample_order.append(sample)
+                for position, column in column_specs:
+                    value = row.iloc[position]
+                    if pd.isna(value) or (isinstance(value, str) and not value.strip()):
+                        continue
+                    key = (sample, column)
+                    source = {"file": filename, "row": int(row_number) + 2, "value": value}
+                    if key not in cells:
+                        cells[key] = source
+                    elif not self._values_equivalent(cells[key]["value"], value):
+                        existing = next((item for item in conflicts
+                                         if item["sample_name"] == sample and item["column"] == column), None)
+                        if existing is None:
+                            existing = {"sample_name": sample, "column": column,
+                                        "values": [cells[key]], "resolution": "First value retained pending review"}
+                            conflicts.append(existing)
+                        existing["values"].append(source)
+
+        records = []
+        for sample in sample_order:
+            record = {self.merge_key: sample}
+            for column in column_order:
+                cell = cells.get((sample, column))
+                record[column] = cell["value"] if cell else np.nan
+            records.append(record)
+        return pd.DataFrame(records, columns=[self.merge_key] + column_order), conflicts
 
     def merge_files_mixed(self, dfs: Dict[str, pd.DataFrame],
                           file_groups: Dict[str, int],
@@ -637,7 +721,7 @@ class FlowDataCleaner:
         n_groups = len(groups)
         n_feature_groups = sum(1 for g in groups.values() if len(g) > 1)
         st.info(
-            f"🗂️ Mixed merge: {n_groups} group(s), "
+            f"Mixed merge: {n_groups} group(s), "
             f"{n_feature_groups} will be feature-merged, "
             f"{n_groups - n_feature_groups} will pass through as-is"
         )
@@ -648,19 +732,19 @@ class FlowDataCleaner:
             st.markdown(f"**Group {gid}** ({len(group_dfs)} file(s)):")
             if len(group_dfs) == 1:
                 result = list(group_dfs.values())[0].copy()
-                st.success(f"  ✓ Group {gid}: single file — {result.shape}")
+                st.success(f"  Group {gid}: single file — {result.shape}")
             else:
                 result = self.merge_files_by_feature(group_dfs, canonical_map=canonical_map)
-                st.success(f"  ✓ Group {gid}: feature-merged → {result.shape}")
+                st.success(f"  Group {gid}: feature-merged → {result.shape}")
             group_results.append(result)
 
         if len(group_results) == 1:
             return group_results[0]
 
         # Row-merge across groups (reindex to align columns)
-        st.info(f"↕️ Row-merging {len(group_results)} groups...")
+        st.info(f"Row-merging {len(group_results)} groups...")
         merged = pd.concat(group_results, ignore_index=True)
-        st.success(f"✅ Mixed merge complete: {merged.shape[0]} rows × {merged.shape[1]} columns")
+        st.success(f"Mixed merge complete: {merged.shape[0]} rows × {merged.shape[1]} columns")
         return merged
 
     def merge_files(self, dfs: Dict[str, pd.DataFrame],
@@ -684,7 +768,7 @@ class FlowDataCleaner:
             df_copy = df.copy()
             if not remove_donor_source:
                 df_copy['Donor_Source'] = name
-            st.info(f"📄 Single file: {df_copy.shape}")
+            st.info(f"Single file: {df_copy.shape}")
             return df_copy
 
         # Feature (column-wise) merge
@@ -692,13 +776,13 @@ class FlowDataCleaner:
             return self.merge_files_by_feature(dfs, canonical_map=canonical_map)
 
         # --- Row-wise merge (original behaviour) ---
-        st.info(f"🔄 Merging {len(dfs)} files with case-insensitive column standardization...")
+        st.info(f"Merging {len(dfs)} files with case-insensitive column standardization...")
         
         # Build canonical map if not provided (use first file as reference)
         if canonical_map is None:
             first_df = list(dfs.values())[0]
             canonical_map = {col.lower(): col for col in first_df.columns}
-            st.info(f"📋 Using first file as canonical column reference")
+            st.info(f"Using first file as canonical column reference")
         
         # Get all unique columns (case-insensitive) and map to canonical names
         all_columns_lower = set()
@@ -722,7 +806,7 @@ class FlowDataCleaner:
                         continue
                     break
         
-        st.info(f"📊 Found {len(all_columns_canonical)} unique columns (case-insensitive) across all files")
+        st.info(f"Found {len(all_columns_canonical)} unique columns (case-insensitive) across all files")
         
         # Prepare dataframes with standardized columns
         labeled_dfs = []
@@ -740,7 +824,7 @@ class FlowDataCleaner:
             
             if rename_map:
                 df_copy = df_copy.rename(columns=rename_map)
-                st.info(f"   🔤 {name}: Standardized {len(rename_map)} column names")
+                st.info(f"   {name}: Standardized {len(rename_map)} column names")
             
             # Reindex to include all canonical columns
             df_copy = df_copy.reindex(columns=sorted(all_columns_canonical))
@@ -750,17 +834,17 @@ class FlowDataCleaner:
                 df_copy['Donor_Source'] = name
             
             labeled_dfs.append(df_copy)
-            st.success(f"  ✓ Prepared {name}: {df_copy.shape}")
+            st.success(f"  Prepared {name}: {df_copy.shape}")
         
         # Concatenate
         merged_df = pd.concat(labeled_dfs, ignore_index=True)
         
-        st.success(f"✅ Merged into {merged_df.shape[0]} rows × {merged_df.shape[1]} columns")
+        st.success(f"Merged into {merged_df.shape[0]} rows × {merged_df.shape[1]} columns")
         
         # Show donor counts if tracking enabled
         if not remove_donor_source and 'Donor_Source' in merged_df.columns:
             donor_counts = merged_df['Donor_Source'].value_counts()
-            with st.expander("📊 View merged file breakdown"):
+            with st.expander("View merged file breakdown"):
                 for donor, count in donor_counts.items():
                     st.metric(donor, f"{count} rows")
         
@@ -809,29 +893,30 @@ class FlowDataCleaner:
             "per_file_input_shapes": {},   # filename -> (rows, cols) at load time
             "per_file_pre_merge_shapes": {},  # filename -> (rows, cols) after cleaning
             "merged_shape": None,          # (rows, cols) immediately after merge
-            "validation": None
+            "validation": None,
+            "merge_conflicts": []
         }
         
         # Step 1: Load files (now includes duplicate column removal)
-        st.subheader("📁 Loading Files")
+        st.subheader("Loading Files")
         dfs = self.load_files(uploaded_files)
         summary["files_loaded"] = len(dfs)
         
         if not dfs:
-            st.error("❌ No files could be loaded")
+            st.error("No files could be loaded")
             return None, summary
         
         summary["original_rows"] = sum(len(df) for df in dfs.values())
         summary["per_file_input_shapes"] = {name: df.shape for name, df in dfs.items()}
         
         # Step 2: Standardize column names
-        st.subheader("📝 Standardizing Column Names")
+        st.subheader("Standardizing Column Names")
         standardized_dfs = {}
         for name, df in dfs.items():
             standardized_dfs[name] = self.standardize_sample_column(df, name)
         
         # Step 3: Analyze structure with case-insensitive comparison
-        st.subheader("🔍 Analyzing File Structure (Case-Insensitive)")
+        st.subheader("Analyzing File Structure (Case-Insensitive)")
         analysis = self.analyze_file_structure(standardized_dfs)
         
         if analysis["file_count"] > 1:
@@ -844,10 +929,10 @@ class FlowDataCleaner:
                 st.metric("Total Unique Columns", len(analysis["all_columns_ci"]))
             
             # Display detailed validation
-            st.markdown("#### 🧬 Intra-Day Validation Results")
+            st.markdown("#### Intra-Day Validation Results")
             
             # Validation 1: Sample overlap check
-            st.markdown("#### 👥 Sample Name Overlap Check")
+            st.markdown("#### Sample Name Overlap Check")
             
             if len(standardized_dfs) > 1:
                 # Build sets of samples per file
@@ -883,43 +968,43 @@ class FlowDataCleaner:
                         if merge_type == 'auto':
                             if detected == 'feature':
                                 st.info(
-                                    f"🔍 **Auto-detected: Feature merge** — "
+                                    f"**Auto-detected: Feature merge** — "
                                     f"{len(duplicate_samples)} sample(s) appear in multiple files. "
                                     f"Files will be joined column-wise on `sample_name`."
                                 )
                             else:
                                 st.warning(
-                                    f"⚠️ **Found {len(duplicate_samples)} samples present in multiple files** "
+                                    f"**Found {len(duplicate_samples)} samples present in multiple files** "
                                     f"(overlap < 50 %). Defaulting to row merge — "
                                     f"this may produce duplicate rows. Consider switching to Feature merge."
                                 )
                         else:  # merge_type == 'feature'
                             st.info(
-                                f"🔗 Feature merge selected — {len(duplicate_samples)} overlapping "
+                                f"Feature merge selected — {len(duplicate_samples)} overlapping "
                                 f"sample(s) will be joined column-wise."
                             )
                     else:  # explicit 'row'
-                        st.error(f"❌ **Found {len(duplicate_samples)} samples present in multiple files!**")
-                        with st.expander("⚠️ View duplicate samples"):
+                        st.error(f"**Found {len(duplicate_samples)} samples present in multiple files!**")
+                        with st.expander("View duplicate samples"):
                             for sample in sorted(duplicate_samples):
                                 files_with_sample = [name for name, samples in sample_sets.items() if sample in samples]
                                 st.markdown(f"- `{sample}` appears in: **{', '.join(files_with_sample)}**")
-                        st.error("⚠️ **This will cause duplicate rows in merged data!** Consider switching to Feature merge.")
+                        st.error("**This will cause duplicate rows in merged data!** Consider switching to Feature merge.")
                 else:
-                    st.success("✅ No duplicate sample names across files - all samples are unique!")
+                    st.success("No duplicate sample names across files - all samples are unique!")
                 
                 # Show per-file sample counts
-                with st.expander("📊 View sample counts per file"):
+                with st.expander("View sample counts per file"):
                     for name, samples in sample_sets.items():
                         st.markdown(f"- **{name}**: {len(samples)} samples")
             
             st.divider()
             
             # Validation 2: Column consistency (case-insensitive)
-            st.markdown("#### 📊 Column Consistency Check (Case-Insensitive)")
+            st.markdown("#### Column Consistency Check (Case-Insensitive)")
             
             if not analysis["identical_structure"]:
-                st.warning("⚠️ **Files have different column structures**")
+                st.warning("**Files have different column structures**")
                 
                 # Find columns with partial presence
                 col_presence_ci = {}
@@ -934,34 +1019,34 @@ class FlowDataCleaner:
                                  if len(files) < len(standardized_dfs) and len(files) > 0}
                 
                 if partial_columns:
-                    st.error(f"❌ **{len(partial_columns)} columns are only in some files:**")
+                    st.error(f"**{len(partial_columns)} columns are only in some files:**")
                     
                     with st.expander(f"View {len(partial_columns)} partially present columns"):
                         for col_lower, files in sorted(partial_columns.items()):
                             missing_files = set(standardized_dfs.keys()) - set(files)
                             st.markdown(f"**`{col_lower}`**")
-                            st.markdown(f"  - ✅ Present in: {', '.join(files)}")
-                            st.markdown(f"  - ❌ Missing from: {', '.join(missing_files)}")
+                            st.markdown(f"  - Present in: {', '.join(files)}")
+                            st.markdown(f"  - Missing from: {', '.join(missing_files)}")
                             st.markdown("")
                 
                 # Check for case mismatches
                 if analysis["case_mismatches"]:
-                    st.warning(f"⚠️ **Found {len(analysis['case_mismatches'])} columns with different casing across files:**")
+                    st.warning(f"**Found {len(analysis['case_mismatches'])} columns with different casing across files:**")
                     with st.expander("View case mismatches (will be standardized in merge)"):
                         for col_lower, casings in sorted(analysis["case_mismatches"].items()):
                             st.markdown(f"**Lowercase: `{col_lower}`**")
                             for casing, files in casings.items():
                                 st.markdown(f"  - `{casing}` in: {', '.join(files)}")
-                    st.info("💡 These will be standardized to first file's casing during merge")
+                    st.info("These will be standardized to first file's casing during merge")
                 
             else:
-                st.success("✅ **Perfect match!** All files have identical column structure (case-insensitive)")
+                st.success("All files have identical column structure (case-insensitive).")
                 st.info(f"All {len(analysis['common_columns_ci'])} columns are consistent across {len(standardized_dfs)} files")
             
             st.divider()
             
             # Validation 3: Data quality checks
-            st.markdown("#### 🔬 Data Quality Checks")
+            st.markdown("#### Data Quality Checks")
             
             quality_issues = []
             
@@ -983,18 +1068,18 @@ class FlowDataCleaner:
                         quality_issues.append(f"**{name}**: Only {unique_samples} unique samples (possibly incomplete file)")
             
             if quality_issues:
-                st.warning(f"⚠️ **Found {len(quality_issues)} potential quality issues:**")
+                st.warning(f"**Found {len(quality_issues)} potential quality issues:**")
                 for issue in quality_issues:
                     st.markdown(f"- {issue}")
             else:
-                st.success("✅ All files passed quality checks!")
+                st.success("All files passed quality checks!")
             
             st.divider()
-            st.info("💡 **All intra-day validation complete!** Review any warnings above before proceeding with merge.")
+            st.info("Intra-day validation complete. Review any warnings before merging.")
         
         # Step 4: Clean sample names
         if cleaning_method != 'none':
-            st.subheader("🧹 Cleaning Sample Names")
+            st.subheader("Cleaning Sample Names")
             cleaned_dfs = {}
             for name, df in standardized_dfs.items():
                 st.markdown(f"**Cleaning {name}:**")
@@ -1009,14 +1094,14 @@ class FlowDataCleaner:
             cleaned_dfs = standardized_dfs
         
         # Step 5: Remove FCS extensions
-        st.subheader("✂️ Removing File Extensions")
+        st.subheader("Removing File Extensions")
         for name in cleaned_dfs:
             cleaned_dfs[name] = self.remove_fcs_extensions(cleaned_dfs[name])
 
         summary["per_file_pre_merge_shapes"] = {name: df.shape for name, df in cleaned_dfs.items()}
 
         # Step 6: Resolve merge strategy and merge
-        st.subheader("🔗 Merging Files")
+        st.subheader("Merging Files")
 
         if len(cleaned_dfs) <= 1:
             resolved_merge_type = 'row'
@@ -1025,38 +1110,9 @@ class FlowDataCleaner:
             resolved_merge_type = 'manual'
             resolved_groups = file_groups  # caller-supplied
         elif merge_type == 'auto':
-            detected_groups = self.detect_merge_groups(cleaned_dfs)
-            n_distinct = len(set(detected_groups.values()))
-            files_per_group = {}
-            for fname, gid in detected_groups.items():
-                files_per_group.setdefault(gid, []).append(fname)
-            feature_groups = [g for g, fs in files_per_group.items() if len(fs) > 1]
-
-            if n_distinct == 1 and feature_groups:
-                # All files share samples → pure feature merge
-                resolved_merge_type = 'feature'
-                resolved_groups = None
-                st.info("🔍 Auto-detected: **Feature merge** (all files share samples)")
-            elif not feature_groups:
-                # No file shares samples with any other → pure row merge
-                resolved_merge_type = 'row'
-                resolved_groups = None
-                st.info("🔍 Auto-detected: **Row merge** (all samples are unique across files)")
-            else:
-                # Mixed
-                resolved_merge_type = 'mixed'
-                resolved_groups = detected_groups
-                st.info(
-                    f"🔍 Auto-detected: **Mixed merge** — "
-                    f"{len(feature_groups)} feature-merge group(s) + "
-                    f"{n_distinct - len(feature_groups)} row-only file(s)"
-                )
-                with st.expander("🗂️ View detected groups"):
-                    for gid in sorted(files_per_group):
-                        strategy = "feature merge" if len(files_per_group[gid]) > 1 else "pass-through"
-                        st.markdown(f"**Group {gid}** ({strategy}):")
-                        for f in files_per_group[gid]:
-                            st.markdown(f"  - `{f}`")
+            resolved_merge_type = 'reconciled'
+            resolved_groups = None
+            st.info("Automatic reconciliation: combining all chunks by sample name and measurement column")
         else:
             # Explicit 'row' or 'feature'
             resolved_merge_type = merge_type
@@ -1064,7 +1120,22 @@ class FlowDataCleaner:
 
         summary["merge_type_used"] = resolved_merge_type
 
-        if resolved_merge_type == 'mixed' or (resolved_merge_type == 'manual' and resolved_groups):
+        if resolved_merge_type == 'reconciled':
+            merged_df, conflicts = self.merge_random_chunks(cleaned_dfs, canonical_map=canonical_map)
+            summary["merge_conflicts"] = conflicts
+            if conflicts:
+                st.error(f"{len(conflicts)} conflicting sample/measurement cells require review")
+                conflict_rows = []
+                for conflict in conflicts:
+                    conflict_rows.append({
+                        "Sample": conflict["sample_name"], "Column": conflict["column"],
+                        "Sources and values": " | ".join(
+                            f"{item['file']} row {item['row']}: {item['value']}" for item in conflict["values"])
+                    })
+                st.dataframe(pd.DataFrame(conflict_rows), use_container_width=True, hide_index=True)
+            else:
+                st.success("All chunks reconciled without conflicting values")
+        elif resolved_merge_type == 'mixed' or (resolved_merge_type == 'manual' and resolved_groups):
             merged_df = self.merge_files_mixed(
                 cleaned_dfs,
                 file_groups=resolved_groups,
@@ -1082,7 +1153,7 @@ class FlowDataCleaner:
 
         # Step 7: Remove FMO samples
         if remove_fmo:
-            st.subheader("🗑️ Removing FMO Samples")
+            st.subheader("Removing FMO Samples")
             before_fmo = len(merged_df)
             merged_df = self.remove_fmo_samples(merged_df)
             summary["fmo_removed"] = before_fmo - len(merged_df)
@@ -1092,20 +1163,20 @@ class FlowDataCleaner:
         
         # Step 8: Validate against metadata (if provided)
         if metadata_df is not None:
-            st.subheader("✅ Validating Against Metadata")
+            st.subheader("Validating Against Metadata")
             validation = self.validate_against_metadata(merged_df, metadata_df)
             summary["validation"] = validation
             
             if validation["valid"]:
-                st.success(f"✅ All {len(validation['matching_samples'])} samples match metadata!")
+                st.success(f"All {len(validation['matching_samples'])} samples match metadata!")
             else:
-                st.warning("⚠️ Sample name mismatches detected")
+                st.warning("Sample name mismatches detected")
                 
                 if validation["in_flow_not_metadata"]:
-                    st.error(f"❌ {len(validation['in_flow_not_metadata'])} samples in flow data but not in metadata:")
+                    st.error(f"{len(validation['in_flow_not_metadata'])} samples in flow data but not in metadata:")
                     with st.expander("View mismatched samples"):
                         for sample in sorted(validation["in_flow_not_metadata"]):
                             st.code(sample, language=None)
-                    st.info("💡 Try adjusting the cleaning settings to match your metadata format")
+                    st.info("Try adjusting the cleaning settings to match your metadata format")
         
         return merged_df, summary

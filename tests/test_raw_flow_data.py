@@ -39,12 +39,13 @@ def test_frequency_validation_is_observational_and_does_not_mutate_values():
     assert result["details"]["Freq"]["plain_numeric_values"] == 1
     assert any("mixes explicit % strings" in warning for warning in result["warnings"])
 
-def test_all_values_below_one_are_flagged_as_ambiguous_not_rescaled():
+def test_entire_frequency_dataset_below_one_is_flagged_without_rescaling():
     frame = pd.DataFrame({"Frequency": [0.04, 0.07, 0.2]})
     result = DataValidator.validate_frequency_ranges(frame)
     assert frame["Frequency"].tolist() == [0.04, 0.07, 0.2]
     assert result["valid"]
-    assert any("proportions or rare percentages" in warning for warning in result["warnings"])
+    assert result["all_plain_numeric_between_zero_and_one"]
+    assert any("across the dataset" in warning for warning in result["warnings"])
 
 def test_explicit_percent_column_is_profiled_without_division():
     frame = pd.DataFrame({"Freq": ["0.04%", "4.7 %", "100%"]})

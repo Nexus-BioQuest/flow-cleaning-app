@@ -18,7 +18,7 @@ def test_gate_mapping_preserves_export_schema_and_case_deduplication():
     mapping = generate_gate_mapping(day_0, day_7)
     assert list(mapping.columns) == OUTPUT_COLUMNS
     assert len(mapping) == 1
-    assert mapping.loc[0, "subset"] == "Freq"
+    assert mapping.loc[0, "metric"] == "Freq. of Parent"
     assert bool(mapping.loc[0, "for_graphing"])
 
 def test_master_workbook_preserves_required_tabs_and_columns():
@@ -28,11 +28,11 @@ def test_master_workbook_preserves_required_tabs_and_columns():
     metadata = pd.DataFrame({"sample_name": ["S1"], "donor": ["D1"]})
     mapping = pd.DataFrame([{column: value for column, value in zip(OUTPUT_COLUMNS, [
         "Singlets/Scatter/Live/CD4-/Total_B_Cells | Count", "Count", "Total B Count",
-        "Count", "B Cells", "Total B", 1.0, True])}])
+        True])}])
     workbook = build_master_workbook(day_0, day_7, precision, precision, mapping, metadata)
     excel = pd.ExcelFile(BytesIO(workbook))
     for sheet in ("day_0_flow_data", "day_7_flow_data", "day_0_precision_count",
-                  "day_7_precision_count", "name_mapping", "name_mapping_tree", "metadata", "B Cells"):
+                  "day_7_precision_count", "name_mapping", "name_mapping_tree", "metadata"):
         assert sheet in excel.sheet_names
     assert list(pd.read_excel(BytesIO(workbook), sheet_name="name_mapping").columns) == OUTPUT_COLUMNS
 

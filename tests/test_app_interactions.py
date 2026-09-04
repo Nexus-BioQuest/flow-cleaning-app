@@ -7,8 +7,8 @@ def test_lock_and_unlock_defaults_keep_the_full_app_rendered():
     page = AppTest.from_file(str(APP), default_timeout=20).run()
     assert not page.exception
     assert [tab.label for tab in page.tabs] == [
-        "01  Metadata", "02  Day 0", "03  Day 7",
-        "04  Gate mapping", "05  Validation", "06  Export",
+        "01 Metadata", "02 Day 0", "03 Day 7",
+        "04 Gate mapping", "05 Validation", "06 Export",
     ]
 
     page.sidebar.button[0].click().run()
