@@ -6,7 +6,7 @@ NEW: Added Freq. of Grandparent support
 """
 
 import re
-from typing import Dict, List, Tuple, Optional
+from typing import List, Optional
 import pandas as pd
 
 class SmartGateNamer:
@@ -228,7 +228,6 @@ class SmartGateNamer:
             gate_name_clean,
             flags=re.IGNORECASE,
         )
-        compact_text = ''.join(gate_name_clean.split()).casefold()
         compact_source = re.sub(r'[_\s-]+', '', gate_name_clean).casefold()
         if compact_markers and ''.join(f"{marker}{status}" for marker, status in compact_markers).casefold() == compact_source:
             marker_display = [
@@ -355,7 +354,6 @@ class SmartGateNamer:
             return ''
 
         last_gate = parts[-1]
-        last_gate_lower = last_gate.lower()
 
         # Handle marker gates - pass full path for context
         marker_display = self._get_marker_status_display(last_gate, gate_path)
@@ -647,7 +645,6 @@ class SmartGateNamer:
         if gate_clean in self.cell_type_map:
             return self.cell_type_map[gate_clean]
 
-        gate_lower = gate_clean.lower()
 
         def normalize_for_matching(text: str) -> str:
             return re.sub(r'[^a-z0-9\+\-]+', ' ', text.lower()).strip()
@@ -847,15 +844,6 @@ class SmartGateNamer:
         return ' '.join(result)
 
 
-def batch_process_gates(gate_metric_pairs: List[Tuple[str, str]]) -> Dict[str, str]:
-    namer = SmartGateNamer()
-    results = {}
-    for gate_path, metric in gate_metric_pairs:
-        key = f"{gate_path} | {metric}"
-        results[key] = namer.generate_name(gate_path, metric)
-    return results
-
-
 def create_gate_name_mapping(df: pd.DataFrame, 
                              gate_col: str = 'gate_path',
                              metric_col: str = 'metric') -> pd.DataFrame:
@@ -919,27 +907,3 @@ def create_gate_name_mapping(df: pd.DataFrame,
         print(f"Deduplicated: {original_count} original combinations → {unique_count} unique plot names")
     
     return result_df
-
-
-if __name__ == "__main__":
-    namer = SmartGateNamer()
-    
-    # Test cases including the new Freq. of Grandparent metric
-    test_cases = [
-        ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Plasmablasts_Cells/Plasma_cells/proliferating/CD19+", "Freq. of Parent"),
-        ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Plasmablasts_Cells/Plasma_cells/proliferating/CD20+", "Freq. of Parent"),
-        ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Pre_GC/GC/CD11c+", "Freq. of Grandparent"),
-        ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Pre_GC/GC/proliferating/CD38+", "Freq. of Grandparent"),
-    ]
-    
-    print("Testing gate naming including frequency of grandparent")
-    print("=" * 80)
-    
-    for gate_path, metric in test_cases:
-        result = namer.generate_name(gate_path, metric)
-        print(f"Metric: {metric}")
-        print(f"Input:  {gate_path}")
-        print(f"Result: {result}")
-        print()
-    
-    print("=" * 80)

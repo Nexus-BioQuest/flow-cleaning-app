@@ -12,7 +12,7 @@ CRITICAL FIXES:
 import pandas as pd
 import numpy as np
 import re
-from typing import Dict, List, Tuple, Optional, Union
+from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 import streamlit as st
 
@@ -573,7 +573,6 @@ class FlowDataCleaner:
 
         st.info(f"Feature merge: joining {len(dfs)} files by sample_name (column-wise)...")
 
-        file_names = list(dfs.keys())
         merged = None
 
         for i, (fname, df) in enumerate(dfs.items()):

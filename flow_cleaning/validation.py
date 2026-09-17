@@ -113,7 +113,6 @@ class DataValidator:
         ref_lower_set = set(ref_lower_map.keys())
         
         # Check each file against reference
-        all_consistent = True
         common_lower = ref_lower_set.copy()
         
         for filename, _, cleaned_df in file_dfs:
@@ -132,7 +131,6 @@ class DataValidator:
             only_in_file = file_lower_set - ref_lower_set
             
             if only_in_ref or only_in_file:
-                all_consistent = False
                 result["consistent"] = False
                 
                 result["column_differences"][filename] = {

@@ -1,6 +1,2 @@
+-r requirements.txt
 pytest>=8,<9
-pandas>=2,<3
-numpy>=1.26,<3
-openpyxl>=3.1,<4
-streamlit>=1.40,<2
-matplotlib>=3.8,<4

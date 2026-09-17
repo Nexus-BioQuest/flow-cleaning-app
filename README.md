@@ -7,7 +7,7 @@ analysis-ready master workbook.
 ## Install
 
 ```bash
-cd ~/Documents/flow-cleaning-app
+cd /path/to/flow-cleaning-app-main
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
@@ -64,6 +64,12 @@ them. Older workbooks using the previous column names
 `precision_count_beads`, `bead_count`, `bead_conc_per_ml`) are still accepted by
 the QC step.
 
+## Workflow
+
+Run this app first and download the master workbook. Then run `app.py` in
+`flow-analysis-app-main`, upload that workbook, and run QC & Normalisation.
+Both apps are independently installable; neither imports code from the other.
+
 ## Structure
 
 - `app.py` - minimal Streamlit launcher
@@ -71,9 +77,9 @@ the QC step.
 - `flow_cleaning/streamlit_app.py` - workflow orchestration
 - `flow_cleaning/data_processing.py` - loading, cleaning, and merging
 - `flow_cleaning/validation.py` - validation rules and reports
+- `flow_cleaning/gate_tree.py` - gate-tree previews and PNG/text downloads
 - `flow_cleaning/gate_mapping.py` - mapping workflow and stable schema
 - `flow_cleaning/gate_naming_rules.py` - deterministic naming rules
-- `flow_cleaning/cell_classification_rules.py` - deterministic classification rules
 - `flow_cleaning/precision_counts.py` - precision-count calculations
 - `flow_cleaning/master_export.py` - master workbook construction
 - `flow_cleaning/ui/` - interface modules
