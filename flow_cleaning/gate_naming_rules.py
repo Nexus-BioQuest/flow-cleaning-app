@@ -223,6 +223,20 @@ class SmartGateNamer:
         # Clean the gate name (just the last part)
         gate_name_clean = gate_name.split('/')[-1] if '/' in gate_name else gate_name
 
+        compact_markers = re.findall(
+            r'((?:CD\d+|CTLA4|PD_?1|[A-Z][a-z]*\d*?))(?:[_\s-]*)(pos|neg|positive|negative)',
+            gate_name_clean,
+            flags=re.IGNORECASE,
+        )
+        compact_text = ''.join(gate_name_clean.split()).casefold()
+        compact_source = re.sub(r'[_\s-]+', '', gate_name_clean).casefold()
+        if compact_markers and ''.join(f"{marker}{status}" for marker, status in compact_markers).casefold() == compact_source:
+            marker_display = [
+                f"{self._canonical_marker(marker)}{'+' if 'pos' in status.lower() else '-'}"
+                for marker, status in compact_markers
+            ]
+            return ''.join(marker_display) if len(marker_display) > 1 else marker_display[0]
+
         # Accept common FlowJo/user variants such as CD86 positive, CD86_pos,
         # CD86pos and CD86⁺ without maintaining an exhaustive marker list.
         generic = re.fullmatch(
@@ -267,6 +281,10 @@ class SmartGateNamer:
             'hla-dr': 'HLA-DR', 'ox40l': 'OX40L', 'ox40': 'OX40',
         }
         lower = compact.lower()
+        if lower.startswith('totalctla4'):
+            return 'Total CTLA4'
+        if lower.startswith('totalpd1') or lower.startswith('totalpd-1'):
+            return 'Total PD-1'
         if lower in aliases:
             return aliases[lower]
         match = re.fullmatch(r'cd(\d+)([a-z]?)', lower)
@@ -291,6 +309,10 @@ class SmartGateNamer:
             return 'Freq. of Parent'
         if re.match(r'^(freq|frequency)( of)? live( cd45( positive| pos)?)?', normalized):
             return 'Freq. of Live CD45+' if 'cd45' in normalized else 'Freq. of Live'
+        if re.match(r'^(freq|frequency)( of)? total cd4 t cells?$', normalized):
+            return 'Freq. of Total CD4 T Cells'
+        if re.match(r'^(freq|frequency)( of)? total cd8 t cells?$', normalized):
+            return 'Freq. of Total CD8 T Cells'
         if normalized.startswith(('median ', 'mfi ')):
             channel = re.search(r'\(([^)]+)\)', text)
             return f"Median ({channel.group(1).strip()})" if channel else text
@@ -301,7 +323,7 @@ class SmartGateNamer:
         gate_path = str(gate_path or '').strip().strip('/')
         metric = self._canonical_metric(metric)
         if gate_path in self.special_cases:
-            return self.special_cases[gate_path]
+            return 'Not Applicable'
         if gate_path == 'Singlets/Scatter/Live' and metric == 'Freq. of Parent':
             return 'Viable %'
         
@@ -315,6 +337,10 @@ class SmartGateNamer:
             result = self._generate_freq_live_name(gate_path)
         elif metric == 'Freq. of Total_B-cells_CD20-CD19':
             result = self._generate_freq_custom_parent_name(gate_path, 'Total B Cells')
+        elif metric == 'Freq. of Total CD4 T Cells':
+            result = self._generate_freq_custom_parent_name(gate_path, 'Total CD4 T Cells')
+        elif metric == 'Freq. of Total CD8 T Cells':
+            result = self._generate_freq_custom_parent_name(gate_path, 'Total CD8 T Cells')
         elif metric.startswith('Median'):
             result = self._generate_median_name(gate_path, metric)
         else:
@@ -444,7 +470,7 @@ class SmartGateNamer:
             parent_cell = self._get_display_name_for_freq(parent_gate)
             return f"Proliferating % (of {parent_cell})"
         
-        # Standard case — but if parent is proliferating/non-proliferating, include grandparent for full context
+        # Standard case - but if parent is proliferating/non-proliferating, include grandparent for full context
         if is_under_prolif:
             current_cell = self._get_display_name_for_freq(current_gate)
             if grandparent_gate:
@@ -648,13 +674,13 @@ class SmartGateNamer:
 
         # Handle compact marker expressions like CD4negCD8neg, CD4pos, CD19neg, etc.
         compact_markers = re.findall(
-            r'((?:CD\d+[A-Za-z]*|[A-Z][a-z]*\d*?))(pos|neg|positive|negative)',
+            r'((?:CD\d+|[A-Z][a-z]*\d*?))(pos|neg|positive|negative)',
             gate_clean,
             flags=re.IGNORECASE
         )
         if compact_markers:
             marker_parts = [
-                f"{marker.upper()}{'+' if 'pos' in status.lower() else '-'}"
+                f"{self._canonical_marker(marker)}{'+' if 'pos' in status.lower() else '-'}"
                 for marker, status in compact_markers
             ]
             return ' '.join(marker_parts)
@@ -851,6 +877,7 @@ def create_gate_name_mapping(df: pd.DataFrame,
     
     mappings = []
     seen_lowercase = {}
+    seen_sources = {}
     
     for _, row in unique_combos.iterrows():
         gate_path = row[gate_col]
@@ -859,13 +886,21 @@ def create_gate_name_mapping(df: pd.DataFrame,
         original_name = f"{gate_path} | {metric}"
         generated_name = namer.generate_name(gate_path, metric)
         
-        # Deduplicate case-insensitive
+        source_key = re.sub(r'\s+', ' ', str(gate_path)).strip().strip('/').casefold()
         name_lower = generated_name.lower()
-        if name_lower in seen_lowercase:
+        if name_lower in seen_lowercase and source_key in seen_sources.get(name_lower, set()):
             final_name = seen_lowercase[name_lower]
+        elif name_lower in seen_lowercase:
+            path_parts = [part for part in re.split(r'[/\\]', str(gate_path).strip()) if part]
+            qualifier_parts = path_parts[-3:] or ["gate"]
+            gate_qualifier = " / ".join(qualifier_parts)
+            final_name = f"{generated_name} [{gate_qualifier}]"
+            if final_name.casefold() in {item['plot_name'].casefold() for item in mappings}:
+                final_name = f"{generated_name} [{gate_path}]"
         else:
             final_name = generated_name
             seen_lowercase[name_lower] = generated_name
+        seen_sources.setdefault(name_lower, set()).add(source_key)
         
         mappings.append({
             'original_name': original_name,

@@ -65,6 +65,28 @@ def _write_lineage_sheets(writer: pd.ExcelWriter, mapping: pd.DataFrame) -> None
         image_data = BytesIO(); fig.tight_layout(); fig.savefig(image_data, format="png", dpi=150, bbox_inches="tight"); plt.close(fig); image_data.seek(0)
         sheet.add_image(Image(image_data), "A1")
 
+def _write_tree_image_sheet(writer: pd.ExcelWriter, mapping: pd.DataFrame) -> None:
+    from openpyxl.drawing.image import Image
+    from matplotlib import pyplot as plt
+
+    sheet = writer.book.create_sheet("name_mapping_tree")
+    writer.sheets["name_mapping_tree"] = sheet
+    lines = _tree_lines(mapping)
+    if not lines:
+        return
+
+    fig, ax = plt.subplots(figsize=(12, max(5, min(30, len(lines) * .25))))
+    ax.axis("off")
+    step = 1 / max(len(lines), 20)
+    for index, line in enumerate(lines):
+        ax.text(.01, 1 - index * step, line, fontfamily="monospace", fontsize=8, va="top")
+    image_data = BytesIO()
+    fig.tight_layout()
+    fig.savefig(image_data, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    image_data.seek(0)
+    sheet.add_image(Image(image_data), "A1")
+
 def build_master_workbook(day_0: pd.DataFrame, day_7: pd.DataFrame, day_0_precision=None,
                           day_7_precision=None, gate_names=None, metadata=None) -> bytes:
     """Return the same workbook sheets produced by the original Streamlit block."""
@@ -76,8 +98,5 @@ def build_master_workbook(day_0: pd.DataFrame, day_7: pd.DataFrame, day_0_precis
         if day_7_precision is not None: day_7_precision.to_excel(writer, index=False, sheet_name="day_7_precision_count")
         if gate_names is not None:
             gate_names.to_excel(writer, index=False, sheet_name="name_mapping")
-            _write_lineage_sheets(writer, gate_names)
-            tree = mapping_tree_frame(gate_names)
-            if not tree.empty: tree.to_excel(writer, index=False, sheet_name="name_mapping_tree")
         if metadata is not None: metadata.to_excel(writer, index=False, sheet_name="metadata")
     return output.getvalue()

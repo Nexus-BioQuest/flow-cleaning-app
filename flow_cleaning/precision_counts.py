@@ -6,9 +6,9 @@ import pandas as pd
 @dataclass(frozen=True)
 class PrecisionCountSettings:
     bead_concentration_per_ml: float
-    beads_per_microlitre: float
-    bead_volume_microlitre: float
-    cell_volume_microlitre: float
+    bead_concentration_per_ul: float
+    bead_volume_ul: float
+    sample_volume_ul: float
 
 def concentration_per_microlitre(concentration_per_ml: float) -> float:
     """Convert a bead concentration from per mL to per µL (1 mL = 1,000 µL)."""
@@ -36,13 +36,27 @@ def filter_summary_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return df.loc[~remove].copy(), int(remove.sum())
 
 def create_precision_count_table(df: pd.DataFrame, bead_column: str, settings: PrecisionCountSettings) -> pd.DataFrame:
-    """Create the established precision-count export schema."""
+    """Create the precision-count export schema.
+
+    Column names match the absolute-count normalisation formula applied later by
+    the QC step::
+
+        absolute count [cells/well] =
+            (N_events x V_bead) / (N_beads x V_sample) x C_beads x V_well
+
+        V_bead   = bead_volume_ul              N_beads = recorded_bead_count
+        V_sample = sample_volume_ul            C_beads = bead_concentration_per_ul
+
+    ``expected_bead_count`` (= C_beads x V_bead) is written for audit only - it is
+    the number of beads that *should* be in the added volume, a sanity check
+    against ``recorded_bead_count``; nothing downstream computes with it.
+    """
     return pd.DataFrame({
         "sample_name": df["sample_name"],
-        "bead_conc_per_ml": round(settings.bead_concentration_per_ml),
-        "beads_per_microlitre": round(settings.beads_per_microlitre),
-        "bead_vol_microlitre": settings.bead_volume_microlitre,
-        "bead_count": round(settings.beads_per_microlitre * settings.bead_volume_microlitre),
-        "cell_vol_microlitre": settings.cell_volume_microlitre,
-        "precision_count_beads": pd.to_numeric(df[bead_column], errors="raise").astype(int),
+        "bead_concentration_per_ml": round(settings.bead_concentration_per_ml),
+        "bead_concentration_per_ul": round(settings.bead_concentration_per_ul),
+        "bead_volume_ul": settings.bead_volume_ul,
+        "expected_bead_count": round(settings.bead_concentration_per_ul * settings.bead_volume_ul),
+        "sample_volume_ul": settings.sample_volume_ul,
+        "recorded_bead_count": pd.to_numeric(df[bead_column], errors="raise").astype(int),
     })

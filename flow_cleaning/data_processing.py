@@ -68,7 +68,7 @@ class FlowDataCleaner:
                             values_match = True
                         elif pd.api.types.is_numeric_dtype(df[base_col]) and pd.api.types.is_numeric_dtype(df[dup_col]):
                             # For numeric, use close comparison
-                            if np.allclose(df[base_col].fillna(0), df[dup_col].fillna(0), rtol=1e-9, equal_nan=True):
+                            if np.allclose(df[base_col], df[dup_col], rtol=1e-9, equal_nan=True):
                                 values_match = True
                         
                         if values_match:
@@ -501,7 +501,7 @@ class FlowDataCleaner:
         Cluster files into merge groups using connected components.
 
         Two files are connected (placed in the same group) when the fraction of
-        sample names they share — relative to the smaller file — exceeds
+        sample names they share - relative to the smaller file - exceeds
         *overlap_threshold*.  Files in the same group will be feature-merged
         (column-wise join on sample_name); groups are then row-merged together.
 
@@ -601,7 +601,7 @@ class FlowDataCleaner:
             if collisions:
                 stem = Path(fname).stem
                 st.warning(
-                    f"{len(collisions)} column(s) from **{fname}** already exist — "
+                    f"{len(collisions)} column(s) from **{fname}** already exist - "
                     f"suffixing with `_{stem}`"
                 )
                 df_copy = df_copy.rename(
@@ -732,7 +732,7 @@ class FlowDataCleaner:
             st.markdown(f"**Group {gid}** ({len(group_dfs)} file(s)):")
             if len(group_dfs) == 1:
                 result = list(group_dfs.values())[0].copy()
-                st.success(f"  Group {gid}: single file — {result.shape}")
+                st.success(f"  Group {gid}: single file - {result.shape}")
             else:
                 result = self.merge_files_by_feature(group_dfs, canonical_map=canonical_map)
                 st.success(f"  Group {gid}: feature-merged → {result.shape}")
@@ -968,19 +968,19 @@ class FlowDataCleaner:
                         if merge_type == 'auto':
                             if detected == 'feature':
                                 st.info(
-                                    f"**Auto-detected: Feature merge** — "
+                                    f"**Auto-detected: Feature merge** - "
                                     f"{len(duplicate_samples)} sample(s) appear in multiple files. "
                                     f"Files will be joined column-wise on `sample_name`."
                                 )
                             else:
                                 st.warning(
                                     f"**Found {len(duplicate_samples)} samples present in multiple files** "
-                                    f"(overlap < 50 %). Defaulting to row merge — "
+                                    f"(overlap < 50 %). Defaulting to row merge - "
                                     f"this may produce duplicate rows. Consider switching to Feature merge."
                                 )
                         else:  # merge_type == 'feature'
                             st.info(
-                                f"Feature merge selected — {len(duplicate_samples)} overlapping "
+                                f"Feature merge selected - {len(duplicate_samples)} overlapping "
                                 f"sample(s) will be joined column-wise."
                             )
                     else:  # explicit 'row'

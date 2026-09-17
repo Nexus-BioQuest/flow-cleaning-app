@@ -376,11 +376,11 @@ current_stage = stage_mapping.get(st.session_state.workflow_stage, 0)
 
 for i, stage in enumerate(stages):
     if i < current_stage:
-        st.sidebar.success(f"Complete — {stage}")
+        st.sidebar.success(f"Complete - {stage}")
     elif i == current_stage:
-        st.sidebar.info(f"Current — {stage}")
+        st.sidebar.info(f"Current - {stage}")
     else:
-        st.sidebar.text(f"Pending — {stage}")
+        st.sidebar.text(f"Pending - {stage}")
 
 st.sidebar.divider()
 
@@ -398,25 +398,42 @@ default_bead_conc = st.sidebar.number_input(
     disabled=defaults_locked,
 )
 
-default_beads_per_ul = concentration_per_microlitre(default_bead_conc)
-st.sidebar.metric("Calculated beads per µL", f"{default_beads_per_ul:,.2f}")
+default_bead_conc_per_ul = concentration_per_microlitre(default_bead_conc)
+st.sidebar.metric("Bead concentration (per µL)", f"{default_bead_conc_per_ul:,.2f}")
 st.sidebar.caption("Calculated as concentration per mL ÷ 1,000.")
 
-default_bead_vol = st.sidebar.number_input(
-    "Bead Volume (µL)",
+default_bead_volume_ul = st.sidebar.number_input(
+    "Bead volume (µL)",
     value=50,
     step=5,
-    help="Default: 50 µL",
+    help="Volume of precision-count bead suspension spiked into each well. Default: 50 µL",
     disabled=defaults_locked,
 )
 
-default_cell_vol = st.sidebar.number_input(
-    "Cell Volume (µL)",
+default_sample_volume_ul = st.sidebar.number_input(
+    "Sample volume (µL)",
     value=150,
     step=10,
-    help="Default: 150 µL",
+    help="Volume of the cell sample acquired on the cytometer. Default: 150 µL",
     disabled=defaults_locked,
 )
+
+with st.sidebar.expander("Absolute-count formula", expanded=False):
+    st.caption(
+        "The QC step converts Day 7 gated event counts to absolute cells per well:"
+    )
+    st.latex(
+        r"\text{cells/well}=\frac{N_{\text{events}}\times V_{\text{bead}}}"
+        r"{N_{\text{beads}}\times V_{\text{sample}}}\times C_{\text{beads}}\times V_{\text{well}}"
+    )
+    st.markdown(
+        "- $N_{\\text{events}}$ - raw gated event count (`<gate> | Count`)\n"
+        "- $V_{\\text{bead}}$ - bead volume added, `bead_volume_ul`\n"
+        "- $N_{\\text{beads}}$ - beads the cytometer recorded, `recorded_bead_count`\n"
+        "- $V_{\\text{sample}}$ - sample volume acquired, `sample_volume_ul`\n"
+        "- $C_{\\text{beads}}$ - bead concentration, `bead_concentration_per_ul`\n"
+        "- $V_{\\text{well}}$ - total well volume (200 µL for standard plates)"
+    )
 
 if not defaults_locked:
     if st.sidebar.button("Lock defaults", type="primary"):
@@ -495,7 +512,7 @@ def render_merge_qc_summary(summary: dict, label: str):
             st.caption("The first value is shown in the merged table. Correct the source files and process them again before export.")
 
     # ── detailed breakdown (collapsible) ────────────────────────────────────
-    with st.expander(f"{label} Merge QC — per-file detail"):
+    with st.expander(f"{label} Merge QC - per-file detail"):
 
         # Input files table
         if per_file_input:
@@ -507,9 +524,9 @@ def render_merge_qc_summary(summary: dict, label: str):
                     "File": fname,
                     "Rows (raw)": r,
                     "Cols (raw)": c,
-                    "Rows (pre-merge)": cleaned_shape[0] if cleaned_shape else "—",
-                    "Cols (pre-merge)": cleaned_shape[1] if cleaned_shape else "—",
-                    "Rows removed": r - cleaned_shape[0] if cleaned_shape else "—",
+                    "Rows (pre-merge)": cleaned_shape[0] if cleaned_shape else "-",
+                    "Cols (pre-merge)": cleaned_shape[1] if cleaned_shape else "-",
+                    "Rows removed": r - cleaned_shape[0] if cleaned_shape else "-",
                 })
             st.dataframe(rows_data, use_container_width=True, hide_index=True)
 
@@ -748,9 +765,9 @@ with tab_day0:
                     options=['auto', 'row', 'feature', 'manual'],
                     format_func=lambda x: {
                         'auto':    'Auto-detect (recommended)',
-                        'row':     'Row merge — different samples, same features',
-                        'feature': 'Feature merge — same samples, different features/markers',
-                        'manual':  '⚙ Manual groups — assign each file to a group',
+                        'row':     'Row merge - different samples, same features',
+                        'feature': 'Feature merge - same samples, different features/markers',
+                        'manual':  '⚙ Manual groups - assign each file to a group',
                     }[x],
                     index=0,
                     key='day_0_merge_type',
@@ -819,6 +836,8 @@ with tab_day0:
                             cleaned_df = cleaned_df[cols]
                         
                         st.session_state.day_0_df = cleaned_df
+                        st.session_state.validation_results = {}
+                        st.session_state.validation_acknowledged = False
                         # BUILD CANONICAL COLUMN MAP FROM DAY 0
                         if st.session_state.day_0_df is not None:
                             st.session_state.canonical_column_map = cleaner.build_canonical_column_map(
@@ -920,7 +939,7 @@ with tab_day0:
                         if st.button("Generate Day 0 Precision Count", type="primary"):
                             precision_df = create_precision_count_table(
                                 st.session_state.day_0_df, bead_col_0,
-                                PrecisionCountSettings(default_bead_conc, default_beads_per_ul, default_bead_vol, default_cell_vol)
+                                PrecisionCountSettings(default_bead_conc, default_bead_conc_per_ul, default_bead_volume_ul, default_sample_volume_ul)
                             )
                             st.session_state.day_0_processed = precision_df
                             st.success("Day 0 precision count generated.")
@@ -1058,9 +1077,9 @@ with tab_day7:
                     options=['auto', 'row', 'feature', 'manual'],
                     format_func=lambda x: {
                         'auto':    'Auto-detect (recommended)',
-                        'row':     'Row merge — different samples, same features',
-                        'feature': 'Feature merge — same samples, different features/markers',
-                        'manual':  '⚙ Manual groups — assign each file to a group',
+                        'row':     'Row merge - different samples, same features',
+                        'feature': 'Feature merge - same samples, different features/markers',
+                        'manual':  '⚙ Manual groups - assign each file to a group',
                     }[x],
                     index=0,
                     key='day_7_merge_type',
@@ -1127,6 +1146,8 @@ with tab_day7:
                             cleaned_df = cleaned_df[cols]
                         
                         st.session_state.day_7_df = cleaned_df
+                        st.session_state.validation_results = {}
+                        st.session_state.validation_acknowledged = False
                         # STANDARDIZE DAY 7 TO DAY 0 CASING
                         if st.session_state.get('canonical_column_map') and st.session_state.day_7_df is not None:
                             st.session_state.day_7_df = cleaner.standardize_columns_to_canonical(
@@ -1223,7 +1244,7 @@ with tab_day7:
                         if st.button("Generate Day 7 Precision Count", type="primary"):
                             precision_df = create_precision_count_table(
                                 st.session_state.day_7_df, bead_col_7,
-                                PrecisionCountSettings(default_bead_conc, default_beads_per_ul, default_bead_vol, default_cell_vol)
+                                PrecisionCountSettings(default_bead_conc, default_bead_conc_per_ul, default_bead_volume_ul, default_sample_volume_ul)
                             )
                             st.session_state.day_7_processed = precision_df
                             st.success("Day 7 precision count generated.")
@@ -1460,6 +1481,7 @@ with tab_validation:
                 st.session_state.day_0_df, st.session_state.day_7_df,
                 st.session_state.metadata_df, st.session_state.day_0_processed,
                 st.session_state.day_7_processed)
+            st.session_state.validation_acknowledged = False
             st.session_state.workflow_stage = 'export'
             st.rerun()
         
@@ -1608,13 +1630,21 @@ with tab_validation:
             st.success("Validation complete. Continue to Export.")
         
         if st.session_state.validation_results:
-            render_validation_summary(st.session_state.validation_results)
+            current_results = run_checks(
+                st.session_state.day_0_df,
+                st.session_state.day_7_df,
+                st.session_state.metadata_df,
+                st.session_state.day_0_processed,
+                st.session_state.day_7_processed,
+            )
+            st.session_state.validation_results = current_results
+            render_validation_summary(current_results)
             st.divider()
             validator = DataValidator()
             report = validator.create_validation_report(
-                day_0_val=st.session_state.validation_results.get('day_0_samples'),
-                day_7_val=st.session_state.validation_results.get('day_7_samples'),
-                column_val=st.session_state.validation_results.get('column')
+                day_0_val=current_results.get('day_0_samples'),
+                day_7_val=current_results.get('day_7_samples'),
+                column_val=current_results.get('column')
             )
             
             st.download_button(
@@ -1704,7 +1734,6 @@ with tab_export:
             sheets_list.append("day_7_precision_count")
         if has_gates:
             sheets_list.append("name_mapping")
-            sheets_list.append("name_mapping_tree")
         if has_metadata:
             sheets_list.append("metadata")
         
@@ -1722,6 +1751,13 @@ with tab_export:
                 try:
                     tree_image = _build_tree_image(tree_lines)
                     st.image(tree_image, caption="Gating name tree preview", use_column_width=True)
+                    st.download_button(
+                        label="Download Full Tree PNG",
+                        data=tree_image,
+                        file_name="full_gate_tree.png",
+                        mime="image/png",
+                        use_container_width=True,
+                    )
                 except Exception:
                     st.warning("Could not render tree image preview; displaying text output instead.")
 
@@ -1779,11 +1815,28 @@ with tab_export:
         merge_conflict_count = sum(len((summary or {}).get("merge_conflicts", [])) for summary in (
             st.session_state.day_0_cleaning_summary, st.session_state.day_7_cleaning_summary))
         if merge_conflict_count:
-            st.error(f"Export is blocked because {merge_conflict_count} conflicting repeated measurements remain. Review them in the Day 0 or Day 7 tab, correct the source files, and process again.")
+            st.warning(f"{merge_conflict_count} conflicting repeated measurements remain. Review them before export; the first encountered value will be retained in the workbook.")
+
+        validation_findings = any(
+            isinstance(result, dict) and (result.get("issues") or result.get("duplicate_groups"))
+            for result in st.session_state.validation_results.values()
+        )
+        acknowledgement_required = validation_findings or merge_conflict_count > 0
+        validation_acknowledged = True
+        if acknowledgement_required:
+            validation_acknowledged = st.checkbox(
+                "I have reviewed the validation findings and merge conflicts, and confirm they are resolved or acceptable for this export.",
+                key="validation_acknowledged",
+            )
+            if not validation_acknowledged:
+                st.info("Review the findings above and confirm them before preparing the workbook.")
+
+        if acknowledgement_required and validation_acknowledged:
+            st.success("Validation findings acknowledged. The master workbook can be prepared.")
 
         # Generate master file
         if st.button("Prepare master workbook", type="primary", use_container_width=True,
-                     disabled=merge_conflict_count > 0):
+                     disabled=not validation_acknowledged):
             output = build_master_workbook(
                 st.session_state.day_0_df,
                 st.session_state.day_7_df,

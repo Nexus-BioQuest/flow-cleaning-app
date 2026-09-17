@@ -132,9 +132,23 @@ def render_details(results: dict) -> None:
                 for issue in results[f"{day}_samples"].get("issues", []): st.write(issue)
         elif detail_type == "Identical columns":
             for day in ("day_0", "day_7"):
-                groups = results[f"{day}_duplicate_columns"].get("duplicate_groups", [])
-                st.markdown(f"**{day.replace('_', ' ').title()} — {len(groups)} groups**")
+                duplicate_result = results[f"{day}_duplicate_columns"]
+                groups = duplicate_result.get("duplicate_groups", [])
+                rows_checked = duplicate_result.get("rows_checked", 0)
+                st.markdown(f"**{day.replace('_', ' ').title()} - {len(groups)} groups ({rows_checked} rows checked)**")
                 st.dataframe(pd.DataFrame({"Columns in identical group": [" | ".join(g) for g in groups]}), hide_index=True, use_container_width=True)
+                details = duplicate_result.get("duplicate_details", [])
+                if details:
+                    evidence = []
+                    for detail in details:
+                        for row in detail["rows"]:
+                            evidence.append({
+                                "Columns": " | ".join(detail["columns"]),
+                                "Row": row["row"],
+                                "Values": " | ".join(f"{column}={value}" for column, value in row["values"].items()),
+                            })
+                    st.caption("First two checked rows for each reported group")
+                    st.dataframe(pd.DataFrame(evidence), hide_index=True, use_container_width=True)
         else:
             for day in ("day_0", "day_7"):
                 result = results.get(f"{day}_precision")

@@ -199,18 +199,19 @@ class DataValidator:
             return []
 
         def normalize_col_values(series: pd.Series):
+            populated = series.notna()
+            if populated.sum() < 2 or not populated.all():
+                return None
             normalized_values = []
             for value in series.tolist():
-                if pd.isna(value):
-                    normalized_values.append(("<NA>", None))
-                else:
-                    normalized_values.append((type(value).__name__, value))
+                normalized_values.append((type(value).__name__, value))
             return tuple(normalized_values)
 
         signature_map = {}
         for col in columns:
             signature = normalize_col_values(df[col])
-            signature_map.setdefault(signature, []).append(col)
+            if signature is not None:
+                signature_map.setdefault(signature, []).append(col)
 
         duplicate_groups = [sorted(cols) for cols in signature_map.values() if len(cols) > 1]
         return sorted(duplicate_groups, key=lambda group: (len(group), group))
@@ -317,11 +318,24 @@ class DataValidator:
                                    ignore_columns: Optional[List[str]] = None) -> Dict:
         """Validate that no columns contain identical full-column value signatures row-by-row."""
         duplicate_groups = DataValidator.find_duplicate_value_columns(df, ignore_columns)
+        duplicate_details = []
+        for group in duplicate_groups:
+            sample_values = []
+            for row_index in df.index[:2]:
+                row_values = {str(column): df.at[row_index, column] for column in group}
+                sample_values.append({
+                    "row": int(row_index) if isinstance(row_index, (int, np.integer)) else str(row_index),
+                    "values": row_values,
+                })
+            duplicate_details.append({"columns": group, "rows": sample_values})
         validation = {
             "valid": True,
             "issues": [],
             "warnings": [],
-            "duplicate_groups": duplicate_groups
+            "duplicate_groups": duplicate_groups,
+            "duplicate_details": duplicate_details,
+            "rows_checked": len(df),
+            "columns_checked": len(df.columns) - len(ignore_columns or []),
         }
 
         if duplicate_groups:
@@ -780,12 +794,16 @@ class DataValidator:
             "warnings": []
         }
         
-        if 'precision_count_beads' not in df.columns:
+        count_column = next(
+            (c for c in ('recorded_bead_count', 'precision_count_beads') if c in df.columns),
+            None,
+        )
+        if count_column is None:
             validation["valid"] = False
-            validation["issues"].append("No precision_count_beads column found")
+            validation["issues"].append("No recorded_bead_count column found")
             return validation
-        
-        counts = pd.to_numeric(df['precision_count_beads'], errors='coerce')
+
+        counts = pd.to_numeric(df[count_column], errors='coerce')
         missing = counts.isna()
         if missing.any():
             validation["valid"] = False

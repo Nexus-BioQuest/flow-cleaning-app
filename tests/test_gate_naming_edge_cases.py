@@ -19,6 +19,24 @@ from flow_cleaning.gate_naming_rules import SmartGateNamer
 def test_marker_spelling_and_status_variants(gate, expected):
     assert SmartGateNamer()._get_marker_status_display(gate) == expected
 
+def test_compact_double_negative_marker_names_are_readable():
+    assert SmartGateNamer()._get_marker_status_display("CD4negCD8neg") == "CD4-CD8-"
+
+def test_compact_ctla4_pd1_marker_combinations_keep_both_statuses():
+    namer = SmartGateNamer()
+    assert namer._get_marker_status_display("CTLA4_neg_PD1_pos") == "CTLA4-PD-1+"
+    assert namer._get_marker_status_display("CTLA4_pos_PD1_neg") == "CTLA4+PD-1-"
+    assert namer._get_marker_status_display("CTLA4_pos_PD1_pos") == "CTLA4+PD-1+"
+
+def test_total_marker_labels_keep_readable_spacing():
+    namer = SmartGateNamer()
+    assert namer._get_marker_status_display("Total_PD1+") == "Total PD-1+"
+    assert namer._get_marker_status_display("Total_CTLA4+") == "Total CTLA4+"
+
+def test_root_gate_metrics_are_explicitly_not_applicable():
+    name = SmartGateNamer().generate_name("Singlets", "Freq. of Parent")
+    assert name == "Not Applicable"
+
 
 @pytest.mark.parametrize("metric", [
     "Freq. of Parent", "Frequency of Parent", "frequency_of_parent",
@@ -27,6 +45,15 @@ def test_marker_spelling_and_status_variants(gate, expected):
 def test_frequency_metric_variants(metric):
     name = SmartGateNamer().generate_name("Live/CD86_pos", metric)
     assert name == "CD86+ % (of Viable)"
+
+@pytest.mark.parametrize("metric", [
+    "Freq. of Total_CD4_T_Cells", "Frequency of Total CD4 T Cells",
+    "Freq. of Total_CD8_T_Cells",
+])
+def test_total_t_cell_denominators_are_named(metric):
+    name = SmartGateNamer().generate_name("Live/CD4pos/Tregs", metric)
+    assert "Unknown Metric" not in name
+    assert "%" in name
 
 
 @pytest.mark.parametrize(("channel", "marker"), [
@@ -64,6 +91,25 @@ def test_case_variants_are_deduplicated_across_days():
     mapping = generate_gate_mapping(day_0, day_7)
     assert len(mapping) == 1
     assert mapping.loc[0, "plot_name"] == "CD86+ % (of Viable)"
+
+def test_distinct_gates_with_same_generated_name_remain_unambiguous():
+    day_0 = pd.DataFrame({
+        "Live/CD86_pos | Frequency of Parent": [0.1],
+        "Live/CD86_pos/Memory | Frequency of Parent": [0.2],
+    })
+    mapping = generate_gate_mapping(day_0, pd.DataFrame())
+    assert len(mapping) == 2
+    assert mapping["plot_name"].nunique() == 2
+    assert any("Memory" in name for name in mapping["plot_name"])
+    assert not any(name.endswith(" 2)") for name in mapping["plot_name"])
+
+def test_same_gate_equivalent_metrics_do_not_get_artificial_suffixes():
+    day_0 = pd.DataFrame({
+        "Live/CD4pos/Total_CD4_T_Cells/Tregs | Frequency of Parent": [0.1],
+        "Live/CD4pos/Total_CD4_T_Cells/Tregs | Freq. of Total_CD4_T_Cells": [0.1],
+    })
+    mapping = generate_gate_mapping(day_0, pd.DataFrame())
+    assert mapping["plot_name"].tolist() == ["Tregs % (of Total CD4 T Cells)", "Tregs % (of Total CD4 T Cells)"]
 
 
 def test_trailing_slashes_and_whitespace_do_not_change_name():
