@@ -1,13 +1,4 @@
-"""
-Flow Cytometry Data Cleaning Module - FIXED VERSION
-
-CRITICAL FIXES:
-1. All column operations are case-insensitive
-2. Day 0 column names are the canonical reference
-3. All merges standardize to Day 0 casing
-4. Duplicate columns (differing only in case) are eliminated
-5. Duplicate columns with .1, .2 suffixes are removed immediately after loading
-"""
+"""Load, clean, validate, and merge flow cytometry exports."""
 
 import pandas as pd
 import numpy as np
@@ -27,17 +18,7 @@ class FlowDataCleaner:
     
     @staticmethod
     def remove_duplicate_columns(df: pd.DataFrame, filename: str = "") -> pd.DataFrame:
-        """
-        Remove duplicate columns with .1, .2, .3 suffixes immediately after loading file.
-        Only removes if values match the base column.
-        
-        Args:
-            df: DataFrame just loaded from file
-            filename: Name of file (for logging)
-            
-        Returns:
-            DataFrame with duplicate columns removed
-        """
+        """Remove suffixed columns only when their values match the base column."""
         suffix_pattern = re.compile(r'\.\d+$')
         
         # Group columns by base name
@@ -93,16 +74,7 @@ class FlowDataCleaner:
         
     def standardize_columns_to_canonical(self, df: pd.DataFrame, 
                                          canonical_map: Dict[str, str]) -> pd.DataFrame:
-        """
-        Standardize all column names to match the canonical casing.
-        
-        Args:
-            df: DataFrame to standardize
-            canonical_map: Dict mapping lowercase column name to canonical case
-            
-        Returns:
-            DataFrame with standardized column names
-        """
+        """Rename columns to their canonical casing where a match exists."""
         df = df.copy()
         
         # Create rename mapping
@@ -121,15 +93,7 @@ class FlowDataCleaner:
         return df
     
     def build_canonical_column_map(self, reference_df: pd.DataFrame) -> Dict[str, str]:
-        """
-        Build canonical column mapping from a reference DataFrame (typically Day 0).
-        
-        Args:
-            reference_df: The reference DataFrame (Day 0)
-            
-        Returns:
-            Dict mapping lowercase column names to the canonical case
-        """
+        """Map lowercase column names to the casing used in the reference data."""
         canonical_map = {}
         for col in reference_df.columns:
             col_lower = col.lower()
@@ -138,18 +102,10 @@ class FlowDataCleaner:
         return canonical_map
     
     def load_files(self, uploaded_files: List) -> Dict[str, pd.DataFrame]:
-        """
-        Load uploaded files without changing measurement values or units.
+        """Load supported files without converting exported measurement values.
 
-        FlowJo may export frequencies as explicit percentage strings or plain
-        numbers. Their scale cannot be inferred safely from magnitude, so this
-        loader deliberately performs no percentage conversion.
-        
-        Args:
-            uploaded_files: List of Streamlit uploaded file objects
-            
-        Returns:
-            Dictionary mapping filenames to DataFrames
+        Frequency units cannot be inferred safely from magnitude, so values stay
+        in their original representation.
         """
         dfs = {}
 
@@ -167,7 +123,7 @@ class FlowDataCleaner:
                     st.warning(f"Unsupported file type: {uploaded_file.name}")
                     continue
 
-                # === NEW: Remove duplicate columns immediately after loading ===
+                # Remove duplicate columns immediately after loading.
                 df = self.remove_duplicate_columns(df, filename=uploaded_file.name)
                 
                 dfs[uploaded_file.name] = df
@@ -230,19 +186,7 @@ class FlowDataCleaner:
                           separator: str = '_',
                           skip_parts: int = 2,
                           regex_pattern: str = None) -> pd.DataFrame:
-        """
-        Clean sample names using various methods.
-        
-        Args:
-            df: DataFrame with sample_name column
-            method: Cleaning method ('none', 'separator', 'regex', 'donor_asterisk')
-            separator: Character to split by (for separator method)
-            skip_parts: Number of parts to skip from start (for separator method)
-            regex_pattern: Regex pattern to remove (for regex method)
-            
-        Returns:
-            DataFrame with cleaned sample names
-        """
+        """Clean sample names using the selected method and options."""
         if 'sample_name' not in df.columns:
             st.warning("No sample_name column found - skipping name cleaning")
             return df
@@ -352,12 +296,7 @@ class FlowDataCleaner:
         return df
     
     def analyze_file_structure(self, dfs: Dict[str, pd.DataFrame]) -> Dict:
-        """
-        Analyze the structure of multiple DataFrames with CASE-INSENSITIVE column comparison.
-        
-        Returns:
-            Dictionary with structural analysis including per-file column differences
-        """
+        """Compare per-file columns case-insensitively and report differences."""
         if not dfs:
             return {"error": "No files provided"}
         
@@ -422,16 +361,7 @@ class FlowDataCleaner:
     def validate_against_metadata(self, 
                                   flow_df: pd.DataFrame, 
                                   metadata_df: pd.DataFrame) -> Dict:
-        """
-        Validate flow data sample names against metadata.
-        
-        Args:
-            flow_df: Flow cytometry DataFrame with sample_name column
-            metadata_df: Metadata DataFrame with sample_name column
-            
-        Returns:
-            Dictionary with validation results
-        """
+        """Compare flow-data sample names with metadata sample names."""
         validation = {
             "valid": True,
             "flow_samples": set(),
@@ -468,10 +398,9 @@ class FlowDataCleaner:
         return validation
     
     def detect_merge_type(self, dfs: Dict[str, pd.DataFrame]) -> str:
-        """
-        Detect whether ALL files should be merged by row or by feature.
-        Returns 'feature' if >50% of unique sample names appear in more than one
-        file, otherwise 'row'.  Use detect_merge_groups() for mixed scenarios.
+        """Choose feature merge when over half of unique samples overlap.
+
+        Use ``detect_merge_groups`` when files may form mixed merge groups.
         """
         if len(dfs) <= 1:
             return 'row'
@@ -497,20 +426,10 @@ class FlowDataCleaner:
 
     def detect_merge_groups(self, dfs: Dict[str, pd.DataFrame],
                             overlap_threshold: float = 0.3) -> Dict[str, int]:
-        """
-        Cluster files into merge groups using connected components.
+        """Group files by connected components of sample-name overlap.
 
-        Two files are connected (placed in the same group) when the fraction of
-        sample names they share - relative to the smaller file - exceeds
-        *overlap_threshold*.  Files in the same group will be feature-merged
-        (column-wise join on sample_name); groups are then row-merged together.
-
-        Args:
-            dfs: Dict of filename -> DataFrame (must have sample_name column).
-            overlap_threshold: Minimum overlap ratio to connect two files (default 0.3).
-
-        Returns:
-            Dict mapping filename -> group_id (1-indexed integers).
+        The overlap is measured against the smaller file; files in each group
+        are feature-merged, then the groups are row-merged.
         """
         if len(dfs) <= 1:
             return {name: 1 for name in dfs}
@@ -554,20 +473,7 @@ class FlowDataCleaner:
 
     def merge_files_by_feature(self, dfs: Dict[str, pd.DataFrame],
                                canonical_map: Optional[Dict[str, str]] = None) -> pd.DataFrame:
-        """
-        Merge files column-wise by outer-joining on sample_name.
-
-        Used when multiple files contain different features (markers) for the
-        same set of samples.  Duplicate non-key columns that appear in more than
-        one file are suffixed with the source filename stem.
-
-        Args:
-            dfs: Dictionary of DataFrames to merge
-            canonical_map: Optional canonical column name mapping (lowercase -> proper case)
-
-        Returns:
-            Wide DataFrame with one row per sample and all feature columns combined
-        """
+        """Outer-join files by sample name, suffixing duplicate feature columns."""
         if len(dfs) == 1:
             return list(dfs.values())[0].copy()
 
@@ -632,12 +538,10 @@ class FlowDataCleaner:
 
     def merge_random_chunks(self, dfs: Dict[str, pd.DataFrame],
                             canonical_map: Optional[Dict[str, str]] = None) -> Tuple[pd.DataFrame, List[Dict]]:
-        """Reconcile arbitrary row/column chunks into one row per sample.
+        """Combine chunks into one row per sample, retaining conflicts for review.
 
-        Empty cells complement one another, repeated equal cells are deduplicated,
-        and genuinely conflicting cells are retained in an audit list. The first
-        encountered value remains in the main table so conflicts are never resolved
-        silently or by an unreliable magnitude rule.
+        Empty cells are filled and equal values deduplicated. The first value is
+        retained when conflicts occur; no values are inferred from magnitude.
         """
         canonical_names = dict(canonical_map or {})
         column_order = []
@@ -701,17 +605,7 @@ class FlowDataCleaner:
     def merge_files_mixed(self, dfs: Dict[str, pd.DataFrame],
                           file_groups: Dict[str, int],
                           canonical_map: Optional[Dict[str, str]] = None) -> pd.DataFrame:
-        """
-        Mixed merge: feature-merge files within each group, then row-merge groups.
-
-        Args:
-            dfs: Dict of filename -> DataFrame.
-            file_groups: Dict mapping filename -> group_id (1-indexed).
-            canonical_map: Optional canonical column casing map.
-
-        Returns:
-            Final merged DataFrame.
-        """
+        """Feature-merge files within groups, then row-merge the group results."""
         # Bucket files by group
         groups: Dict[int, Dict[str, pd.DataFrame]] = {}
         for name, gid in file_groups.items():
@@ -751,18 +645,7 @@ class FlowDataCleaner:
                    remove_donor_source: bool = True,
                    canonical_map: Optional[Dict[str, str]] = None,
                    merge_type: str = 'row') -> pd.DataFrame:
-        """
-        Merge multiple DataFrames into one with CASE-INSENSITIVE column handling.
-
-        Args:
-            dfs: Dictionary of DataFrames to merge
-            remove_donor_source: Whether to remove the Donor_Source tracking column
-            canonical_map: Optional canonical column name mapping (lowercase -> proper case)
-            merge_type: 'row' (concatenate rows) or 'feature' (join columns on sample_name)
-
-        Returns:
-            Merged DataFrame with standardized column names
-        """
+        """Merge dataframes by rows or sample name with canonical column casing."""
         if len(dfs) == 1:
             name, df = list(dfs.items())[0]
             df_copy = df.copy()
@@ -861,26 +744,10 @@ class FlowDataCleaner:
                      canonical_map: Optional[Dict[str, str]] = None,
                      merge_type: str = 'auto',
                      file_groups: Optional[Dict[str, int]] = None) -> Tuple[pd.DataFrame, Dict]:
-        """
-        Complete processing pipeline for uploaded files with case-insensitive handling.
+        """Run the upload, cleaning, validation, and merge pipeline.
 
-        Args:
-            uploaded_files: List of uploaded file objects
-            cleaning_method: Method for cleaning sample names
-            separator: Separator for splitting names
-            skip_parts: Parts to skip when splitting
-            regex_pattern: Regex pattern for cleaning
-            remove_fmo: Whether to remove FMO samples
-            metadata_df: Optional metadata for validation
-            canonical_map: Optional canonical column mapping (from Day 0)
-            merge_type: 'auto' (detect groups via connected components),
-                        'row' (stack all files), 'feature' (join all files on sample_name),
-                        or 'manual' (use file_groups argument).
-            file_groups: Dict mapping filename -> group_id used when merge_type='manual'.
-                         Files in the same group are feature-merged; groups are row-merged.
-
-        Returns:
-            Tuple of (processed DataFrame, summary dict)
+        ``merge_type`` selects automatic, row, feature, or manual merging;
+        manual mode uses ``file_groups`` to define feature-merge groups.
         """
         summary = {
             "files_loaded": 0,
@@ -897,7 +764,7 @@ class FlowDataCleaner:
             "merge_conflicts": []
         }
         
-        # Step 1: Load files (now includes duplicate column removal)
+        # Step 1: Load files
         st.subheader("Loading Files")
         dfs = self.load_files(uploaded_files)
         summary["files_loaded"] = len(dfs)

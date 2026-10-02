@@ -1,9 +1,4 @@
-"""Rule-based gate mapping used by the cleaning app.
-
-This module makes the existing automated naming behaviour reusable and testable.
-It does not call an AI service: names and classifications come from fixed lookup
-tables and regular-expression rules in the existing naming modules.
-"""
+"""Build editable gate mappings from the app's fixed naming rules."""
 from __future__ import annotations
 import pandas as pd
 from flow_cleaning.gate_naming_rules import create_gate_name_mapping

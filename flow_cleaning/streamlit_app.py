@@ -1,15 +1,5 @@
 #!/usr/bin/env python3
-"""
-Flow Cytometry Data Preparation interface.
-
-Capabilities:
-- Optional precision count data for Day 0 and/or Day 7
-- Automatic removal of Mean and SD summary rows
-- Intra-day validation results displayed in Day 0 and Day 7 tabs
-- Validation warnings before proceeding to next step
-- Visual indicators for data quality issues
-- Dynamic master file generation based on available data
-"""
+"""Streamlit interface for flow cytometry data preparation."""
 
 import re
 import zipfile
@@ -18,7 +8,6 @@ import pandas as pd
 import io
 from typing import Optional, List
 
-# Import custom modules
 from flow_cleaning.data_processing import FlowDataCleaner
 from flow_cleaning.validation import DataValidator
 from flow_cleaning.gate_mapping import generate_gate_mapping
@@ -481,7 +470,7 @@ def render_merge_qc_summary(summary: dict, label: str):
     mean_sd_removed  = summary.get("mean_sd_removed", 0)
     merge_conflicts = summary.get("merge_conflicts", [])
 
-    # ── top-line metrics ────────────────────────────────────────────────────
+    # Top-line metrics
     total_input_rows = sum(r for r, _ in per_file_input.values()) if per_file_input else summary.get("original_rows", 0)
     total_input_cols = max((c for _, c in per_file_input.values()), default=0) if per_file_input else 0
     merged_rows = merged_shape[0] if merged_shape else final_rows
@@ -511,7 +500,7 @@ def render_merge_qc_summary(summary: dict, label: str):
             st.dataframe(conflict_rows, use_container_width=True, hide_index=True)
             st.caption("The first value is shown in the merged table. Correct the source files and process them again before export.")
 
-    # ── detailed breakdown (collapsible) ────────────────────────────────────
+    # Detailed breakdown
     with st.expander(f"{label} Merge QC - per-file detail"):
 
         # Input files table
@@ -862,8 +851,6 @@ with tab_day0:
                             }
                             
                             # Extract duplicate samples (from structure analysis if available)
-                            # Note: This requires the cleaner to pass this info back, which we'll need to add
-                            # For now, we'll recalculate here
                             if 'sample_name' in cleaned_df.columns:
                                 # Count how many times each sample appears
                                 sample_counts = cleaned_df['sample_name'].value_counts()
@@ -908,7 +895,7 @@ with tab_day0:
                 # Preview data
                 st.dataframe(st.session_state.day_0_df.head(10), use_container_width=True)
                 
-                # ====== NEW: OPTIONAL PRECISION COUNT SECTION ======
+                    # Optional precision-count entry.
                 st.divider()
                 st.subheader("Precision Count Table (Optional)")
                 
@@ -1214,7 +1201,7 @@ with tab_day7:
                 
                 st.dataframe(st.session_state.day_7_df.head(10), use_container_width=True)
                 
-                # ====== NEW: OPTIONAL PRECISION COUNT SECTION ======
+                    # Optional precision-count entry.
                 st.divider()
                 st.subheader("Precision Count Table (Optional)")
                 
@@ -1877,15 +1864,6 @@ with st.expander("User guide"):
     st.markdown("""
     ### Quick Start Guide
     
-    **New in v5.2:**
-    - **Automatic Mean/SD row removal** - Summary rows are filtered out automatically
-    - **Optional precision count data** for Day 0 and/or Day 7
-    - Dynamic master file generation based on available data
-    - Multi-file upload support
-    - Integrated sample name cleaning
-    - Intra-day validation displayed in tabs
-    - Validation of sample names, columns, frequencies and precision counts
-    
     **Workflow:**
     
     1. **Metadata** (Tab 1)
@@ -1906,12 +1884,6 @@ with st.expander("User guide"):
        - Mean and SD summary rows removed automatically
        - **Optional:** Generate precision count table (uncheck if not captured)
        - View intra-day validation results
-    3. **Day 7 Data** (Tab 3)
-       - Repeat for Day 7 files
-       - Same cleaning options available
-       - **Optional:** Generate precision count table (uncheck if not captured)
-       - View intra-day validation results
-    
     4. **Gate Names** (Tab 4) - Optional
        - Upload or auto-generate gate names
        - Improves downstream plotting

@@ -1,21 +1,8 @@
 #!/usr/bin/env python3
-"""
-Merge two exported flow cytometry master Excel files.
+"""Merge exported workbooks while preserving sheets from both inputs.
 
-This script is intended for the workflow where you have:
-1. one master workbook that has your edited Day 0 / Day 7 data and naming/QC changes
-2. another master workbook that contains additional columns/rows you want to bring over
-
-It will:
-- merge the Day 0 / Day 7 flow sheets by adding extra columns from the second workbook
-- merge the name mapping sheet by stacking extra rows from the second workbook
-- preserve all other sheets, carrying them over from the base workbook or adding them from the second workbook
-
-Example:
-    python merge_master_exports.py \
-        --base "edited_master.xlsx" \
-        --other "source_master.xlsx" \
-        --output "merged_master.xlsx"
+Flow and precision sheets are joined by sample/name when possible; mapping and
+other sheets are stacked.
 """
 
 from __future__ import annotations

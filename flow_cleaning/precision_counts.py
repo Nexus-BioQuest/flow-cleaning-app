@@ -36,20 +36,10 @@ def filter_summary_rows(df: pd.DataFrame) -> tuple[pd.DataFrame, int]:
     return df.loc[~remove].copy(), int(remove.sum())
 
 def create_precision_count_table(df: pd.DataFrame, bead_column: str, settings: PrecisionCountSettings) -> pd.DataFrame:
-    """Create the precision-count export schema.
+    """Build precision-count fields for absolute-count QC.
 
-    Column names match the absolute-count normalisation formula applied later by
-    the QC step::
-
-        absolute count [cells/well] =
-            (N_events x V_bead) / (N_beads x V_sample) x C_beads x V_well
-
-        V_bead   = bead_volume_ul              N_beads = recorded_bead_count
-        V_sample = sample_volume_ul            C_beads = bead_concentration_per_ul
-
-    ``expected_bead_count`` (= C_beads x V_bead) is written for audit only - it is
-    the number of beads that *should* be in the added volume, a sanity check
-    against ``recorded_bead_count``; nothing downstream computes with it.
+    ``expected_bead_count`` is an audit-only estimate; QC uses the recorded
+    bead count instead.
     """
     return pd.DataFrame({
         "sample_name": df["sample_name"],

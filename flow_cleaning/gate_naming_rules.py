@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Rule-based Flow Cytometry Gate Namer
-Fix for CD19+ marker detection issue
-NEW: Added Freq. of Grandparent support
-"""
+"""Rule-based display names for flow cytometry gates and metrics."""
 
 import re
 from typing import Dict, List, Tuple, Optional
@@ -214,12 +210,7 @@ class SmartGateNamer:
             return f"Proliferating {parent_cell}{suffix}"
 
     def _get_marker_status_display(self, gate_name: str, full_gate_path: str = "") -> Optional[str]:
-        """
-        Detect if the gate represents a marker-positive or marker-negative population
-        and return a formatted marker string like 'CD86+' or 'LILRB1-'
-        
-        FIXED: Now accepts full_gate_path to properly handle CD19 disambiguation
-        """
+        """Format marker-positive or negative gates, using the path to disambiguate CD19."""
         # Clean the gate name (just the last part)
         gate_name_clean = gate_name.split('/')[-1] if '/' in gate_name else gate_name
 
@@ -470,7 +461,7 @@ class SmartGateNamer:
             parent_cell = self._get_display_name_for_freq(parent_gate)
             return f"Proliferating % (of {parent_cell})"
         
-        # Standard case - but if parent is proliferating/non-proliferating, include grandparent for full context
+        # Preserve grandparent context for proliferation-status gates.
         if is_under_prolif:
             current_cell = self._get_display_name_for_freq(current_gate)
             if grandparent_gate:
@@ -859,17 +850,7 @@ def batch_process_gates(gate_metric_pairs: List[Tuple[str, str]]) -> Dict[str, s
 def create_gate_name_mapping(df: pd.DataFrame, 
                              gate_col: str = 'gate_path',
                              metric_col: str = 'metric') -> pd.DataFrame:
-    """
-    Create a deduplicated gate name mapping from a DataFrame.
-    
-    Args:
-        df: DataFrame with gate paths and metrics
-        gate_col: Name of column containing gate paths
-        metric_col: Name of column containing metrics
-        
-    Returns:
-        DataFrame with original_name and plot_name columns (deduplicated)
-    """
+    """Build gate-to-plot mappings with unique display names."""
     namer = SmartGateNamer()
     
     # Get unique gate/metric combinations
@@ -924,7 +905,7 @@ def create_gate_name_mapping(df: pd.DataFrame,
 if __name__ == "__main__":
     namer = SmartGateNamer()
     
-    # Test cases including the new Freq. of Grandparent metric
+    # Example gate and metric combinations.
     test_cases = [
         ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Plasmablasts_Cells/Plasma_cells/proliferating/CD19+", "Freq. of Parent"),
         ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Plasmablasts_Cells/Plasma_cells/proliferating/CD20+", "Freq. of Parent"),

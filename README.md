@@ -4,36 +4,29 @@ A standalone Streamlit application for cleaning and validating FlowJo exports,
 generating precision-count tables and gate mappings, and exporting an
 analysis-ready master workbook.
 
-## Install
+## Windows PowerShell setup
 
-```bash
-cd ~/Documents/flow-cleaning-app
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+Install Python 3.10 or newer, then run these commands from the project folder:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt -r requirements-test.txt
 ```
 
 ## Run
 
-```bash
-streamlit run app.py
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
 ## Test
 
-```bash
-python -m pip install -r requirements-test.txt
-python -m pytest
+```powershell
+.\.venv\Scripts\python.exe -m pytest
 ```
 
-The application never rescales frequency values automatically. FlowJo values
-are preserved as supplied and frequency columns are profiled for explicit
-percentages, plain numbers, mixed representations, invalid values, and
-ambiguous all-below-1 inputs.
-
-The interface follows the operating-system light or dark appearance setting.
-Its custom styling uses paired theme tokens rather than fixed foreground and
-background colours.
+These commands use the project-local environment; activation and
+PowerShell execution-policy changes are not required.
 
 ## Precision counts and the absolute-count formula
 
@@ -56,13 +49,6 @@ absolute count [cells/well] = (N_events × V_bead) / (N_beads × V_sample) × C_
 | V_sample | sample volume acquired | `sample_volume_ul` | µL |
 | C_beads | precision-count bead concentration | `bead_concentration_per_ul` | beads/µL |
 | V_well | total well volume (200 for standard plates) | QC sidebar constant | µL |
-
-`expected_bead_count` (= `bead_concentration_per_ul` × `bead_volume_ul`) and
-`bead_concentration_per_ml` are written for audit only; nothing computes with
-them. Older workbooks using the previous column names
-(`beads_per_microlitre`, `bead_vol_microlitre`, `cell_vol_microlitre`,
-`precision_count_beads`, `bead_count`, `bead_conc_per_ml`) are still accepted by
-the QC step.
 
 ## Structure
 

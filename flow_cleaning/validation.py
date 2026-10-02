@@ -1,11 +1,4 @@
-"""
-Data Validation Module - FIXED VERSION
-
-CRITICAL FIXES:
-1. All column comparisons are case-insensitive
-2. Day 0 columns are the canonical reference
-3. Recommendations guide users to standardize to Day 0 casing
-"""
+"""Validation rules and reports for flow cytometry data."""
 
 import numpy as np
 import pandas as pd
@@ -19,20 +12,7 @@ class DataValidator:
     @staticmethod
     def validate_individual_files(file_dfs: List[Tuple[str, pd.DataFrame, pd.DataFrame]], 
                                   day_label: str = "Day") -> Dict:
-        """
-        Validate individual files within a day before merging.
-        Checks for:
-        1. Column consistency across files
-        2. Sample name consistency  
-        3. Sample names lost during cleaning
-        
-        Args:
-            file_dfs: List of tuples (filename, raw_df, cleaned_df)
-            day_label: Label for the day (e.g., "Day 0", "Day 7")
-            
-        Returns:
-            Dict with validation results
-        """
+        """Check column structure, sample names, and cleaning effects before merging."""
         validation = {
             "valid": True,
             "day": day_label,
