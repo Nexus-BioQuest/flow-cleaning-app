@@ -375,37 +375,49 @@ st.sidebar.divider()
 
 # Default values
 st.sidebar.header("Precision count defaults")
-st.sidebar.caption("Applied to all samples unless overridden.")
+st.sidebar.caption(
+    "Set separately for each day; bead concentration and volumes may differ "
+    "between Day 0 and Day 7. Applied to all samples of that day unless overridden."
+)
 defaults_locked = st.session_state.defaults_set
 
-default_bead_conc = st.sidebar.number_input(
-    "Bead concentration (per mL)",
-    min_value=0.0,
-    value=1.00e6,
-    format="%.2e",
-    help="Default: 1.00E+06",
-    disabled=defaults_locked,
-)
 
-default_bead_conc_per_ul = concentration_per_microlitre(default_bead_conc)
-st.sidebar.metric("Bead concentration (per µL)", f"{default_bead_conc_per_ul:,.2f}")
-st.sidebar.caption("Calculated as concentration per mL ÷ 1,000.")
+def _precision_settings_inputs(day_key: str, day_label: str) -> PrecisionCountSettings:
+    """Render sidebar precision-count inputs for one day."""
+    with st.sidebar.expander(f"{day_label} precision count settings", expanded=True):
+        bead_conc = st.number_input(
+            "Bead concentration (per mL)",
+            min_value=0.0,
+            value=1.00e6,
+            format="%.2e",
+            help="Default: 1.00E+06",
+            disabled=defaults_locked,
+            key=f"{day_key}_bead_conc",
+        )
+        bead_conc_per_ul = concentration_per_microlitre(bead_conc)
+        st.metric("Bead concentration (per µL)", f"{bead_conc_per_ul:,.2f}")
+        st.caption("Calculated as concentration per mL ÷ 1,000.")
+        bead_volume_ul = st.number_input(
+            "Bead volume (µL)",
+            value=50,
+            step=5,
+            help="Volume of precision-count bead suspension spiked into each well. Default: 50 µL",
+            disabled=defaults_locked,
+            key=f"{day_key}_bead_volume",
+        )
+        sample_volume_ul = st.number_input(
+            "Sample volume (µL)",
+            value=150,
+            step=10,
+            help="Volume of the cell sample acquired on the cytometer. Default: 150 µL",
+            disabled=defaults_locked,
+            key=f"{day_key}_sample_volume",
+        )
+    return PrecisionCountSettings(bead_conc, bead_conc_per_ul, bead_volume_ul, sample_volume_ul)
 
-default_bead_volume_ul = st.sidebar.number_input(
-    "Bead volume (µL)",
-    value=50,
-    step=5,
-    help="Volume of precision-count bead suspension spiked into each well. Default: 50 µL",
-    disabled=defaults_locked,
-)
 
-default_sample_volume_ul = st.sidebar.number_input(
-    "Sample volume (µL)",
-    value=150,
-    step=10,
-    help="Volume of the cell sample acquired on the cytometer. Default: 150 µL",
-    disabled=defaults_locked,
-)
+day_0_precision_settings = _precision_settings_inputs("day_0", "Day 0")
+day_7_precision_settings = _precision_settings_inputs("day_7", "Day 7")
 
 with st.sidebar.expander("Absolute-count formula", expanded=False):
     st.caption(
@@ -926,7 +938,7 @@ with tab_day0:
                         if st.button("Generate Day 0 Precision Count", type="primary"):
                             precision_df = create_precision_count_table(
                                 st.session_state.day_0_df, bead_col_0,
-                                PrecisionCountSettings(default_bead_conc, default_bead_conc_per_ul, default_bead_volume_ul, default_sample_volume_ul)
+                                day_0_precision_settings
                             )
                             st.session_state.day_0_processed = precision_df
                             st.success("Day 0 precision count generated.")
@@ -1231,7 +1243,7 @@ with tab_day7:
                         if st.button("Generate Day 7 Precision Count", type="primary"):
                             precision_df = create_precision_count_table(
                                 st.session_state.day_7_df, bead_col_7,
-                                PrecisionCountSettings(default_bead_conc, default_bead_conc_per_ul, default_bead_volume_ul, default_sample_volume_ul)
+                                day_7_precision_settings
                             )
                             st.session_state.day_7_processed = precision_df
                             st.success("Day 7 precision count generated.")
