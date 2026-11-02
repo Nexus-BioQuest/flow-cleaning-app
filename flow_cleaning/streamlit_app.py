@@ -16,8 +16,7 @@ from flow_cleaning.precision_counts import (PrecisionCountSettings, create_preci
                               concentration_per_microlitre, detect_bead_count_column,
                               filter_summary_rows)
 from flow_cleaning.ui.metadata_tab import render as render_metadata_tab
-from flow_cleaning.ui.validation_tab import render as render_validation_summary, run_checks
-
+from flow_cleaning.ui.validation_tab import build_findings, render as render_validation_summary, run_checks
 
 def _parse_gating_name(gating_name: str) -> tuple[list[str], str]:
     """Split a gating name into path segments and metric."""
@@ -32,7 +31,6 @@ def _parse_gating_name(gating_name: str) -> tuple[list[str], str]:
 
     segments = [segment.strip() for segment in gate_path.split('/') if segment.strip()]
     return segments, metric
-
 
 def _build_name_mapping_tree_df(name_mapping_df: pd.DataFrame) -> pd.DataFrame:
     """Build a worksheet-friendly tree representation of gate paths."""
@@ -60,12 +58,10 @@ def _build_name_mapping_tree_df(name_mapping_df: pd.DataFrame) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
 
-    # Normalize columns so all rows contain all levels
     columns = [f'Level {i+1}' for i in range(max_depth)] + [
         'Metric', 'Gating Name', 'Plot Name', 'For Graphing'
     ]
     return pd.DataFrame(rows, columns=columns)
-
 
 def _normalize_lineage_label(lineage: str) -> str:
     """Normalize major lineage labels for sheet names."""
@@ -84,7 +80,6 @@ def _normalize_lineage_label(lineage: str) -> str:
         return 'Unknown'
     return str(lineage).strip()
 
-
 def _normalize_sheet_name(name: str) -> str:
     """Generate a valid Excel worksheet name from a lineage label."""
     if not name:
@@ -93,7 +88,6 @@ def _normalize_sheet_name(name: str) -> str:
     if not clean:
         return 'Unknown'
     return clean[:31]
-
 
 def _group_gate_names_by_lineage(name_mapping_df: pd.DataFrame) -> dict[str, pd.DataFrame]:
     """Group gate names by major cell lineage for export tabs."""
@@ -111,7 +105,6 @@ def _group_gate_names_by_lineage(name_mapping_df: pd.DataFrame) -> dict[str, pd.
 
     return {k: v for k, v in lineage_groups.items() if not v.empty}
 
-
 def _write_lineage_tabs_with_tree(writer: pd.ExcelWriter, gate_names_df: pd.DataFrame) -> None:
     """Write one worksheet per major lineage containing only a rendered tree image."""
     from openpyxl.drawing.image import Image
@@ -128,7 +121,6 @@ def _write_lineage_tabs_with_tree(writer: pd.ExcelWriter, gate_names_df: pd.Data
             sheet_name = f"{original_sheet_name}_{suffix}"
         used_sheet_names.add(sheet_name)
 
-        # Create a blank sheet for the lineage image
         worksheet = writer.book.create_sheet(title=sheet_name)
         writer.sheets[sheet_name] = worksheet
 
@@ -142,7 +134,6 @@ def _write_lineage_tabs_with_tree(writer: pd.ExcelWriter, gate_names_df: pd.Data
             worksheet.add_image(img, "A1")
         except Exception:
             pass
-
 
 def _build_tree_text(name_mapping_df: pd.DataFrame, max_lines: int | None = 200) -> list[str]:
     """Build a text-based tree from the gating_name and metric columns."""
@@ -175,7 +166,6 @@ def _build_tree_text(name_mapping_df: pd.DataFrame, max_lines: int | None = 200)
         return lines[:max_lines] + [f"... ({len(lines) - max_lines} more lines truncated)"]
     return lines
 
-
 def _build_tree_image(tree_lines: list[str]) -> bytes:
     """Render the tree lines into a PNG image."""
     try:
@@ -200,7 +190,6 @@ def _build_tree_image(tree_lines: list[str]) -> bytes:
     buf.seek(0)
     return buf.getvalue()
 
-
 def _filter_tree_for_lineage(name_mapping_df: pd.DataFrame, lineage: str) -> pd.DataFrame:
     """Return the subset of gate names belonging to a major lineage."""
     if 'cell_lineage' not in name_mapping_df.columns:
@@ -211,7 +200,6 @@ def _filter_tree_for_lineage(name_mapping_df: pd.DataFrame, lineage: str) -> pd.
         lambda x: _normalize_lineage_label(str(x).strip()) == normalized
     )]
     return subset_df
-
 
 def _lineage_pngs_zip(name_mapping_df: pd.DataFrame, lineages: list[str]) -> bytes:
     """Build a ZIP package containing PNGs for requested major lineages."""
@@ -230,7 +218,6 @@ def _lineage_pngs_zip(name_mapping_df: pd.DataFrame, lineages: list[str]) -> byt
     buf.seek(0)
     return buf.getvalue()
 
-
 def _lineage_texts_zip(name_mapping_df: pd.DataFrame, lineages: list[str]) -> bytes:
     """Build a ZIP package containing text trees for requested major lineages."""
     buf = io.BytesIO()
@@ -248,16 +235,12 @@ def _lineage_texts_zip(name_mapping_df: pd.DataFrame, lineages: list[str]) -> by
     buf.seek(0)
     return buf.getvalue()
 
-
 def _full_tree_text(name_mapping_df: pd.DataFrame) -> str:
     """Build the full, untruncated text tree for the entire gate mapping."""
     return "\n".join(_build_tree_text(name_mapping_df, max_lines=None))
 
-# Gate generation is local and rule-based; importing gate_mapping above verifies
-# that its required rule tables are available.
 GATE_NAMER_AVAILABLE = True
 
-# Page configuration
 st.set_page_config(
     page_title="Flow Cytometry Data Preparation",
     page_icon="◼",
@@ -308,50 +291,43 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Initialize session state
 def init_session_state():
     """Initialize all session state variables."""
     defaults = {
-        # Metadata
+
         'metadata_df': None,
         'metadata_uploaded': False,
-        
-        # Day 0 data
+
         'day_0_raw_files': [],
         'day_0_df': None,
         'day_0_processed': None,
         'day_0_cleaning_summary': None,
         'day_0_validation_results': None,  
-        
-        # Day 7 data
+
         'day_7_raw_files': [],
         'day_7_df': None,
         'day_7_processed': None,
         'day_7_cleaning_summary': None,
         'day_7_validation_results': None, 
-        
-        # Gate names
+
+        'additional_days': {},
+
         'gate_names_df': None,
-        
-        # Validation
+
         'validation_results': {},
-        
-        # Settings
-        'defaults_set': False,
+
         'canonical_column_map': None,
-        'workflow_stage': 'metadata',  # metadata -> day_0 -> day_7 -> validation -> export
+        'workflow_stage': 'metadata',
     }
-    
+
     for key, value in defaults.items():
         if key not in st.session_state:
             st.session_state[key] = value
 
 init_session_state()
 
-# Sidebar - Global Settings
 st.sidebar.title("Run settings")
 
-# Workflow progress
 st.sidebar.header("Workflow progress")
 stages = ['Metadata', 'Day 0', 'Day 7', 'Validation', 'Export']
 stage_mapping = {
@@ -373,25 +349,15 @@ for i, stage in enumerate(stages):
 
 st.sidebar.divider()
 
-# Default values
-st.sidebar.header("Precision count defaults")
-st.sidebar.caption(
-    "Set separately for each day; bead concentration and volumes may differ "
-    "between Day 0 and Day 7. Applied to all samples of that day unless overridden."
-)
-defaults_locked = st.session_state.defaults_set
-
-
 def _precision_settings_inputs(day_key: str, day_label: str) -> PrecisionCountSettings:
-    """Render sidebar precision-count inputs for one day."""
-    with st.sidebar.expander(f"{day_label} precision count settings", expanded=True):
+    """Render precision-count inputs for one day."""
+    with st.expander(f"{day_label} precision count settings", expanded=True):
         bead_conc = st.number_input(
             "Bead concentration (per mL)",
             min_value=0.0,
             value=1.00e6,
             format="%.2e",
             help="Default: 1.00E+06",
-            disabled=defaults_locked,
             key=f"{day_key}_bead_conc",
         )
         bead_conc_per_ul = concentration_per_microlitre(bead_conc)
@@ -402,7 +368,6 @@ def _precision_settings_inputs(day_key: str, day_label: str) -> PrecisionCountSe
             value=50,
             step=5,
             help="Volume of precision-count bead suspension spiked into each well. Default: 50 µL",
-            disabled=defaults_locked,
             key=f"{day_key}_bead_volume",
         )
         sample_volume_ul = st.number_input(
@@ -410,14 +375,9 @@ def _precision_settings_inputs(day_key: str, day_label: str) -> PrecisionCountSe
             value=150,
             step=10,
             help="Volume of the cell sample acquired on the cytometer. Default: 150 µL",
-            disabled=defaults_locked,
             key=f"{day_key}_sample_volume",
         )
     return PrecisionCountSettings(bead_conc, bead_conc_per_ul, bead_volume_ul, sample_volume_ul)
-
-
-day_0_precision_settings = _precision_settings_inputs("day_0", "Day 0")
-day_7_precision_settings = _precision_settings_inputs("day_7", "Day 7")
 
 with st.sidebar.expander("Absolute-count formula", expanded=False):
     st.caption(
@@ -436,17 +396,6 @@ with st.sidebar.expander("Absolute-count formula", expanded=False):
         "- $V_{\\text{well}}$ - total well volume (200 µL for standard plates)"
     )
 
-if not defaults_locked:
-    if st.sidebar.button("Lock defaults", type="primary"):
-        st.session_state.defaults_set = True
-        st.rerun()
-else:
-    st.sidebar.success("Defaults locked")
-    if st.sidebar.button("Unlock defaults"):
-        st.session_state.defaults_set = False
-        st.rerun()
-
-# Main content
 st.title("Flow Cytometry Data Preparation")
 st.markdown("""
 Prepare FlowJo exports for downstream quality control and analysis. Upload the
@@ -454,35 +403,39 @@ study metadata, process Day 0 and Day 7 files, review the gate mapping and
 validation results, then export a single analysis-ready workbook.
 """)
 
-# Create tabs for workflow stages
-tab_metadata, tab_day0, tab_day7, tab_gates, tab_validation, tab_export = st.tabs([
+additional_day_numbers = sorted(st.session_state.additional_days)
+tab_labels = [
     "01 Metadata",
-    "02 Day 0", 
+    "02 Day 0",
     "03 Day 7",
-    "04 Gate mapping",
-    "05 Validation",
-    "06 Export"
-])
+    "04 Additional days",
+]
+tab_labels.extend(
+    f"{index + 5:02d} Day {day_number}"
+    for index, day_number in enumerate(additional_day_numbers)
+)
+first_closing_tab = len(tab_labels) + 1
+tab_labels.extend(
+    f"{number:02d} {name}"
+    for number, name in enumerate(("Gate mapping", "Validation", "Export"), start=first_closing_tab)
+)
+workflow_tabs = st.tabs(tab_labels)
+tab_metadata, tab_day0, tab_day7, tab_additional_days = workflow_tabs[:4]
+additional_day_tabs = workflow_tabs[4:-3]
+tab_gates, tab_validation, tab_export = workflow_tabs[-3:]
 
 def render_merge_qc_summary(summary: dict, label: str):
-    """
-    Render a QC panel showing per-file shapes and before/after merge comparison.
-
-    Args:
-        summary: Dict returned by FlowDataCleaner.process_files()
-        label: "Day 0" or "Day 7" used in headings
-    """
+    """Render file shapes, merge results, and row-removal counts."""
     merge_type = summary.get("merge_type_used", "row") or "row"
     per_file_input   = summary.get("per_file_input_shapes", {})
     per_file_cleaned = summary.get("per_file_pre_merge_shapes", {})
-    merged_shape     = summary.get("merged_shape")       # (rows, cols) right after merge
+    merged_shape     = summary.get("merged_shape")
     final_rows       = summary.get("final_rows", 0)
     final_cols       = summary.get("final_cols", 0)
     fmo_removed      = summary.get("fmo_removed", 0)
     mean_sd_removed  = summary.get("mean_sd_removed", 0)
     merge_conflicts = summary.get("merge_conflicts", [])
 
-    # Top-line metrics
     total_input_rows = sum(r for r, _ in per_file_input.values()) if per_file_input else summary.get("original_rows", 0)
     total_input_cols = max((c for _, c in per_file_input.values()), default=0) if per_file_input else 0
     merged_rows = merged_shape[0] if merged_shape else final_rows
@@ -512,10 +465,8 @@ def render_merge_qc_summary(summary: dict, label: str):
             st.dataframe(conflict_rows, use_container_width=True, hide_index=True)
             st.caption("The first value is shown in the merged table. Correct the source files and process them again before export.")
 
-    # Detailed breakdown
     with st.expander(f"{label} Merge QC - per-file detail"):
 
-        # Input files table
         if per_file_input:
             st.markdown("**Input files (at load time):**")
             rows_data = []
@@ -533,7 +484,6 @@ def render_merge_qc_summary(summary: dict, label: str):
 
         st.markdown("---")
 
-        # Merge summary arrow
         if len(per_file_input) > 1:
             parts = [f"{r}r × {c}c" for _, (r, c) in per_file_cleaned.items()] if per_file_cleaned else []
             arrow = " + " if merge_type in ("row", "mixed") else " joined with "
@@ -548,7 +498,6 @@ def render_merge_qc_summary(summary: dict, label: str):
             if parts:
                 st.markdown(f"`{arrow.join(parts)}` → `{merged_rows}r × {merged_cols}c`")
 
-        # After-merge vs final
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**After merge:**")
@@ -567,23 +516,14 @@ def render_merge_qc_summary(summary: dict, label: str):
                 + (f", {mean_sd_removed} Mean/SD row(s)" if mean_sd_removed else "")
             )
 
-
 def display_intra_day_validation_summary(validation_results: dict, day_label: str):
-    """
-    Display a summary card of intra-day validation results.
-    
-    Args:
-        validation_results: Dict containing validation results from cleaning process
-        day_label: "Day 0" or "Day 7"
-    """
+    """Render validation status and details for one processing day."""
     if not validation_results:
         return
-    
-    # Determine overall status
+
     has_errors = False
     has_warnings = False
-    
-    # Check for various issues
+
     if validation_results.get('duplicate_samples'):
         has_errors = True
     if validation_results.get('partial_columns'):
@@ -592,19 +532,16 @@ def display_intra_day_validation_summary(validation_results: dict, day_label: st
         has_warnings = True
     if validation_results.get('quality_issues'):
         has_warnings = True
-    
-    # Display status card
+
     if has_errors:
         st.error(f"{day_label} intra-day validation found errors")
     elif has_warnings:
         st.warning(f"{day_label} intra-day validation found warnings")
     else:
         st.success(f"{day_label} intra-day validation passed")
-    
-    # Create expandable section with details
+
     with st.expander(f"View {day_label} Validation Details"):
-        
-        # Sample duplicates
+
         if validation_results.get('duplicate_samples'):
             st.error(f"**Found {len(validation_results['duplicate_samples'])} duplicate samples across files:**")
             for sample, files in list(validation_results['duplicate_samples'].items())[:10]:
@@ -613,10 +550,9 @@ def display_intra_day_validation_summary(validation_results: dict, day_label: st
                 st.markdown(f"... and {len(validation_results['duplicate_samples']) - 10} more duplicates")
         else:
             st.success("No duplicate sample names across files")
-        
+
         st.divider()
-        
-        # Column consistency
+
         if validation_results.get('partial_columns'):
             st.warning(f"**{len(validation_results['partial_columns'])} columns not in all files:**")
             for col, files in list(validation_results['partial_columns'].items())[:5]:
@@ -625,30 +561,27 @@ def display_intra_day_validation_summary(validation_results: dict, day_label: st
                 st.markdown(f"... and {len(validation_results['partial_columns']) - 5} more")
         else:
             st.success("All columns present in all files")
-        
+
         st.divider()
-        
-        # Case mismatches
+
         if validation_results.get('case_mismatches'):
             st.warning(f"**{len(validation_results['case_mismatches'])} columns with case differences:**")
             for col_lower, casings in list(validation_results['case_mismatches'].items())[:5]:
                 st.markdown(f"**`{col_lower}`**: {', '.join([f'`{c}`' for c in casings.keys()])}")
         else:
             st.success("No case mismatches in column names")
-        
+
         st.divider()
-        
-        # Quality issues
+
         if validation_results.get('quality_issues'):
             st.warning(f"**{len(validation_results['quality_issues'])} data quality issues:**")
             for issue in validation_results['quality_issues']:
                 st.markdown(f"- {issue}")
         else:
             st.success("All files passed quality checks")
-        
+
         st.divider()
-        
-        # Summary metrics
+
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Files Merged", validation_results.get('file_count', 0))
@@ -657,26 +590,21 @@ def display_intra_day_validation_summary(validation_results: dict, day_label: st
         with col3:
             st.metric("Unique Samples", validation_results.get('unique_samples', 0))
 
-
-# TAB 1: METADATA
 with tab_metadata:
     render_metadata_tab()
 
-
-# TAB 2: DAY 0 DATA
 with tab_day0:
     st.header("Day 0 data")
-    
+
     if not st.session_state.metadata_uploaded:
         st.warning("Please upload metadata first (Tab 1)")
     else:
         st.markdown("""
-        Upload your Day 0 flow cytometry files. You can upload:
+        Upload Day 0 flow cytometry files. Supported input:
         - Single cleaned file, or
         - Multiple raw files (will be merged and cleaned automatically)
         """)
-        
-        # Multi-file uploader
+
         uploaded_day_0_files = st.file_uploader(
             "Upload Day 0 file(s)",
             type=['xlsx', 'xls', 'csv'],
@@ -684,22 +612,20 @@ with tab_day0:
             key="day_0_files_upload",
             help="Upload one or more files"
         )
-        
+
         if uploaded_day_0_files:
             st.info(f"{len(uploaded_day_0_files)} file(s) selected")
-            
-            # Show file list
+
             with st.expander("View selected files"):
                 for f in uploaded_day_0_files:
                     st.text(f"- {f.name}")
-            
+
             st.divider()
-            
-            # Cleaning options (if multiple files or needs cleaning)
+
             st.subheader("Processing options")
-            
+
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 cleaning_method = st.selectbox(
                     "Sample Name Cleaning Method",
@@ -713,7 +639,7 @@ with tab_day0:
                     help="Select how to clean sample names",
                     key="day_0_cleaning_method"
                 )
-            
+
             with col2:
                 remove_fmo = st.checkbox(
                     "Remove FMO samples",
@@ -721,12 +647,11 @@ with tab_day0:
                     help="Remove Fluorescence Minus One controls",
                     key="day_0_remove_fmo"
                 )
-            
-            # Additional cleaning options based on method
+
             separator = '_'
             skip_parts = 2
             regex_pattern = None
-            
+
             if cleaning_method == 'separator':
                 col1, col2 = st.columns(2)
                 with col1:
@@ -745,9 +670,9 @@ with tab_day0:
                         help="Number of separator-delimited parts to remove",
                         key="day_0_skip_parts"
                     )
-                
+
                 st.info(f"Example: `Donor1*_B2_Sample1` → `Sample1` (skips first {skip_parts} parts)")
-            
+
             elif cleaning_method == 'regex':
                 regex_pattern = st.text_input(
                     "Regex pattern to remove",
@@ -756,10 +681,9 @@ with tab_day0:
                     key="day_0_regex"
                 )
                 st.info(f"Pattern: `{regex_pattern}`")
-            
+
             st.divider()
 
-            # Merge type selector (only relevant when multiple files are uploaded)
             if len(uploaded_day_0_files) > 1:
                 merge_type_day0 = st.radio(
                     "Merge strategy",
@@ -782,7 +706,6 @@ with tab_day0:
                     horizontal=True,
                 )
 
-                # Manual group assignment
                 file_groups_day0 = None
                 if merge_type_day0 == 'manual':
                     st.markdown("**Assign each file to a group number.** Files in the same group are feature-merged; groups are then row-merged.")
@@ -802,14 +725,12 @@ with tab_day0:
                 file_groups_day0 = None
 
             st.divider()
-            
-            # Process button
+
             if st.button("Process Day 0 files", type="primary", use_container_width=True):
                 with st.spinner("Processing Day 0 files..."):
-                    # Create cleaner instance
+
                     cleaner = FlowDataCleaner()
-                    
-                    # Process files
+
                     cleaned_df, summary = cleaner.process_files(
                         uploaded_files=uploaded_day_0_files,
                         cleaning_method=cleaning_method,
@@ -821,37 +742,33 @@ with tab_day0:
                         merge_type=merge_type_day0,
                         file_groups=file_groups_day0,
                     )
-                    
+
                     if cleaned_df is not None:
-                        # Filter out Mean and SD rows
+
                         cleaned_df, removed_mean_sd = filter_summary_rows(cleaned_df)
                         if removed_mean_sd > 0:
                             st.info(f"Removed {removed_mean_sd} Mean/SD summary rows")
-                        
-                        # Store removal count in summary
+
                         summary['mean_sd_removed'] = removed_mean_sd
-                        
-                        # Ensure sample_name is always the first column
+
                         if 'sample_name' in cleaned_df.columns:
                             cols = ['sample_name'] + [col for col in cleaned_df.columns if col != 'sample_name']
                             cleaned_df = cleaned_df[cols]
-                        
+
                         st.session_state.day_0_df = cleaned_df
                         st.session_state.validation_results = {}
                         st.session_state.validation_acknowledged = False
-                        # BUILD CANONICAL COLUMN MAP FROM DAY 0
+
                         if st.session_state.day_0_df is not None:
                             st.session_state.canonical_column_map = cleaner.build_canonical_column_map(
                                 st.session_state.day_0_df
                             )
                             st.success(f"Day 0 columns set as canonical reference ({len(st.session_state.canonical_column_map)} columns)")
                         st.session_state.day_0_cleaning_summary = summary
-                        
-                        # Extract validation results from summary if multiple files were processed
+
                         if len(uploaded_day_0_files) > 1 and 'structure_analysis' in summary:
                             analysis = summary['structure_analysis']
-                            
-                            # Build validation results dict
+
                             validation_results = {
                                 'file_count': analysis['file_count'],
                                 'total_samples': summary['final_rows'],
@@ -861,90 +778,80 @@ with tab_day0:
                                 'case_mismatches': {},
                                 'quality_issues': []
                             }
-                            
-                            # Extract duplicate samples (from structure analysis if available)
+
                             if 'sample_name' in cleaned_df.columns:
-                                # Count how many times each sample appears
+
                                 sample_counts = cleaned_df['sample_name'].value_counts()
                                 duplicates = sample_counts[sample_counts > 1]
                                 if len(duplicates) > 0:
                                     validation_results['duplicate_samples'] = {
                                         sample: ['merged_file'] for sample in duplicates.index
                                     }
-                            
-                            # Extract partial columns
+
                             if not analysis['identical_structure']:
                                 validation_results['partial_columns'] = {
                                     col: list(files) for col, files in 
                                     analysis.get('unique_columns_per_file', {}).items()
                                     if files
                                 }
-                            
+
                             st.session_state.day_0_validation_results = validation_results
-                        
+
                         st.session_state.workflow_stage = 'day_7'
-                        
+
                         st.success("Day 0 data processed.")
                         st.rerun()
-            
-            # Show processed data if available
+
             if st.session_state.day_0_df is not None:
                 st.divider()
                 st.subheader("Processed Day 0 Data")
-                
-                # Display intra-day validation results if available
+
                 if st.session_state.day_0_validation_results and len(uploaded_day_0_files) > 1:
                     display_intra_day_validation_summary(
                         st.session_state.day_0_validation_results,
                         "Day 0"
                     )
                     st.divider()
-                
-                # QC summary
+
                 summary = st.session_state.day_0_cleaning_summary
                 render_merge_qc_summary(summary, "Day 0")
-                
-                # Preview data
+
                 st.dataframe(st.session_state.day_0_df.head(10), use_container_width=True)
-                
-                    # Optional precision-count entry.
+
                 st.divider()
                 st.subheader("Precision Count Table (Optional)")
-                
+
                 include_day_0_precision = st.checkbox(
                     "Include Day 0 precision count data",
                     value=True,
                     help="Uncheck if precision count beads were not captured for Day 0",
                     key="include_day_0_precision"
                 )
-                
+
                 if include_day_0_precision:
-                    # Detect bead column
+
                     detected_bead = detect_bead_count_column(st.session_state.day_0_df)
-                    
+
                     if detected_bead:
                         st.info(f"Auto-detected bead count column: `{detected_bead}`")
-                    
+
                     bead_col_0 = st.selectbox(
                         "Select bead count column",
                         options=st.session_state.day_0_df.columns.tolist(),
                         index=st.session_state.day_0_df.columns.tolist().index(detected_bead) if detected_bead else 0,
                         key="day_0_bead_col"
                     )
-                    
-                    if not st.session_state.defaults_set:
-                        st.warning("Please lock default values in the sidebar first")
-                    else:
-                        if st.button("Generate Day 0 Precision Count", type="primary"):
-                            precision_df = create_precision_count_table(
-                                st.session_state.day_0_df, bead_col_0,
-                                day_0_precision_settings
-                            )
-                            st.session_state.day_0_processed = precision_df
-                            st.success("Day 0 precision count generated.")
-                            st.rerun()
-                    
-                    # Show precision count table if generated
+
+                    day_0_precision_settings = _precision_settings_inputs("day_0", "Day 0")
+                    if st.button("Generate Day 0 Precision Count", type="primary"):
+                        precision_df = create_precision_count_table(
+                            st.session_state.day_0_df, bead_col_0,
+                            day_0_precision_settings
+                        )
+                        st.session_state.day_0_processed = precision_df
+                        st.success("Day 0 precision count generated.")
+                        st.rerun()
+
                     if st.session_state.day_0_processed is not None:
                         st.subheader("Edit Day 0 Precision Count")
                         edited_df = st.data_editor(
@@ -954,39 +861,34 @@ with tab_day0:
                             key="day_0_precision_editor"
                         )
                         st.session_state.day_0_processed = edited_df
-                        
-                        # Validate
+
                         validator = DataValidator()
                         validation = validator.validate_precision_counts(edited_df)
-                        
+
                         if validation['warnings']:
                             st.warning("**Precision Count Warnings:**")
                             for warning in validation['warnings']:
                                 st.markdown(f"- {warning}")
                 else:
                     st.info("Day 0 precision count data will not be included in master file")
-                    # Clear any existing precision count data
+
                     if st.session_state.day_0_processed is not None:
                         if st.button("Clear existing Day 0 precision count"):
                             st.session_state.day_0_processed = None
                             st.rerun()
 
-
-# TAB 3: DAY 7 DATA
 with tab_day7:
     st.header("Day 7 data")
-    
+
     if not st.session_state.metadata_uploaded:
         st.warning("Please upload metadata first (Tab 1)")
     elif st.session_state.day_0_df is None:
         st.warning("Please process Day 0 data first (Tab 2)")
     else:
         st.markdown("""
-        Upload your Day 7 flow cytometry files. The same cleaning settings will be suggested
-        based on your Day 0 processing.
+        Upload Day 7 flow cytometry files. Cleaning settings are prefilled from Day 0 processing.
         """)
-        
-        # Multi-file uploader
+
         uploaded_day_7_files = st.file_uploader(
             "Upload Day 7 file(s)",
             type=['xlsx', 'xls', 'csv'],
@@ -994,28 +896,25 @@ with tab_day7:
             key="day_7_files_upload",
             help="Upload one or more files"
         )
-        
+
         if uploaded_day_7_files:
             st.info(f"{len(uploaded_day_7_files)} file(s) selected")
-            
-            # Show file list
+
             with st.expander("View selected files"):
                 for f in uploaded_day_7_files:
                     st.text(f"- {f.name}")
-            
+
             st.divider()
-            
-            # Cleaning options
+
             st.subheader("Processing options")
-            
-            # Suggest same settings as Day 0
+
             default_method = 'none'
             if st.session_state.day_0_cleaning_summary:
                 if st.session_state.day_0_cleaning_summary.get('cleaning_applied'):
                     st.info("Using same cleaning settings as Day 0")
-            
+
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 cleaning_method = st.selectbox(
                     "Sample Name Cleaning Method",
@@ -1029,7 +928,7 @@ with tab_day7:
                     help="Select how to clean sample names",
                     key="day_7_cleaning_method"
                 )
-            
+
             with col2:
                 remove_fmo = st.checkbox(
                     "Remove FMO samples",
@@ -1037,12 +936,11 @@ with tab_day7:
                     help="Remove Fluorescence Minus One controls",
                     key="day_7_remove_fmo"
                 )
-            
-            # Additional cleaning options
+
             separator = '_'
             skip_parts = 2
             regex_pattern = None
-            
+
             if cleaning_method == 'separator':
                 col1, col2 = st.columns(2)
                 with col1:
@@ -1059,17 +957,16 @@ with tab_day7:
                         max_value=10,
                         key="day_7_skip_parts"
                     )
-            
+
             elif cleaning_method == 'regex':
                 regex_pattern = st.text_input(
                     "Regex pattern to remove",
                     value=r'^[^_]*\*_[^_]*_',
                     key="day_7_regex"
                 )
-            
+
             st.divider()
 
-            # Merge type selector
             if len(uploaded_day_7_files) > 1:
                 merge_type_day7 = st.radio(
                     "Merge strategy",
@@ -1092,7 +989,6 @@ with tab_day7:
                     horizontal=True,
                 )
 
-                # Manual group assignment
                 file_groups_day7 = None
                 if merge_type_day7 == 'manual':
                     st.markdown("**Assign each file to a group number.** Files in the same group are feature-merged; groups are then row-merged.")
@@ -1112,12 +1008,11 @@ with tab_day7:
                 file_groups_day7 = None
 
             st.divider()
-            
-            # Process button
+
             if st.button("Process Day 7 files", type="primary", use_container_width=True):
                 with st.spinner("Processing Day 7 files..."):
                     cleaner = FlowDataCleaner()
-                    
+
                     cleaned_df, summary = cleaner.process_files(
                         uploaded_files=uploaded_day_7_files,
                         cleaning_method=cleaning_method,
@@ -1129,25 +1024,23 @@ with tab_day7:
                         merge_type=merge_type_day7,
                         file_groups=file_groups_day7,
                     )
-                    
+
                     if cleaned_df is not None:
-                        # Filter out Mean and SD rows
+
                         cleaned_df, removed_mean_sd = filter_summary_rows(cleaned_df)
                         if removed_mean_sd > 0:
                             st.info(f"Removed {removed_mean_sd} Mean/SD summary rows")
-                        
-                        # Store removal count in summary
+
                         summary['mean_sd_removed'] = removed_mean_sd
-                        
-                        # Ensure sample_name is always the first column
+
                         if 'sample_name' in cleaned_df.columns:
                             cols = ['sample_name'] + [col for col in cleaned_df.columns if col != 'sample_name']
                             cleaned_df = cleaned_df[cols]
-                        
+
                         st.session_state.day_7_df = cleaned_df
                         st.session_state.validation_results = {}
                         st.session_state.validation_acknowledged = False
-                        # STANDARDIZE DAY 7 TO DAY 0 CASING
+
                         if st.session_state.get('canonical_column_map') and st.session_state.day_7_df is not None:
                             st.session_state.day_7_df = cleaner.standardize_columns_to_canonical(
                                 st.session_state.day_7_df,
@@ -1155,11 +1048,10 @@ with tab_day7:
                             )
                             st.success("Day 7 columns standardized to match Day 0 casing")
                         st.session_state.day_7_cleaning_summary = summary
-                        
-                        # Extract validation results from summary if multiple files
+
                         if len(uploaded_day_7_files) > 1 and 'structure_analysis' in summary:
                             analysis = summary['structure_analysis']
-                            
+
                             validation_results = {
                                 'file_count': analysis['file_count'],
                                 'total_samples': summary['final_rows'],
@@ -1169,8 +1061,7 @@ with tab_day7:
                                 'case_mismatches': {},
                                 'quality_issues': []
                             }
-                            
-                            # Recalculate duplicates
+
                             if 'sample_name' in cleaned_df.columns:
                                 sample_counts = cleaned_df['sample_name'].value_counts()
                                 duplicates = sample_counts[sample_counts > 1]
@@ -1178,77 +1069,70 @@ with tab_day7:
                                     validation_results['duplicate_samples'] = {
                                         sample: ['merged_file'] for sample in duplicates.index
                                     }
-                            
-                            # Extract partial columns
+
                             if not analysis['identical_structure']:
                                 validation_results['partial_columns'] = {
                                     col: list(files) for col, files in 
                                     analysis.get('unique_columns_per_file', {}).items()
                                     if files
                                 }
-                            
+
                             st.session_state.day_7_validation_results = validation_results
-                        
+
                         st.session_state.workflow_stage = 'validation'
-                        
+
                         st.success("Day 7 data processed.")
                         st.rerun()
-            
-            # Show processed data
+
             if st.session_state.day_7_df is not None:
                 st.divider()
                 st.subheader("Processed Day 7 Data")
-                
-                # Display intra-day validation results if available
+
                 if st.session_state.day_7_validation_results and len(uploaded_day_7_files) > 1:
                     display_intra_day_validation_summary(
                         st.session_state.day_7_validation_results,
                         "Day 7"
                     )
                     st.divider()
-                
-                # QC summary
+
                 summary = st.session_state.day_7_cleaning_summary
                 render_merge_qc_summary(summary, "Day 7")
-                
+
                 st.dataframe(st.session_state.day_7_df.head(10), use_container_width=True)
-                
-                    # Optional precision-count entry.
+
                 st.divider()
                 st.subheader("Precision Count Table (Optional)")
-                
+
                 include_day_7_precision = st.checkbox(
                     "Include Day 7 precision count data",
                     value=True,
                     help="Uncheck if precision count beads were not captured for Day 7",
                     key="include_day_7_precision"
                 )
-                
+
                 if include_day_7_precision:
                     detected_bead = detect_bead_count_column(st.session_state.day_7_df)
-                    
+
                     if detected_bead:
                         st.info(f"Auto-detected bead count column: `{detected_bead}`")
-                    
+
                     bead_col_7 = st.selectbox(
                         "Select bead count column",
                         options=st.session_state.day_7_df.columns.tolist(),
                         index=st.session_state.day_7_df.columns.tolist().index(detected_bead) if detected_bead else 0,
                         key="day_7_bead_col"
                     )
-                    
-                    if not st.session_state.defaults_set:
-                        st.warning("Please lock default values in the sidebar first")
-                    else:
-                        if st.button("Generate Day 7 Precision Count", type="primary"):
-                            precision_df = create_precision_count_table(
-                                st.session_state.day_7_df, bead_col_7,
-                                day_7_precision_settings
-                            )
-                            st.session_state.day_7_processed = precision_df
-                            st.success("Day 7 precision count generated.")
-                            st.rerun()
-                    
+
+                    day_7_precision_settings = _precision_settings_inputs("day_7", "Day 7")
+                    if st.button("Generate Day 7 Precision Count", type="primary"):
+                        precision_df = create_precision_count_table(
+                            st.session_state.day_7_df, bead_col_7,
+                            day_7_precision_settings
+                        )
+                        st.session_state.day_7_processed = precision_df
+                        st.success("Day 7 precision count generated.")
+                        st.rerun()
+
                     if st.session_state.day_7_processed is not None:
                         st.subheader("Edit Day 7 Precision Count")
                         edited_df = st.data_editor(
@@ -1258,106 +1142,104 @@ with tab_day7:
                             key="day_7_precision_editor"
                         )
                         st.session_state.day_7_processed = edited_df
-                        
+
                         validator = DataValidator()
                         validation = validator.validate_precision_counts(edited_df)
-                        
+
                         if validation['warnings']:
                             st.warning("**Precision Count Warnings:**")
                             for warning in validation['warnings']:
                                 st.markdown(f"- {warning}")
                 else:
                     st.info("Day 7 precision count data will not be included in master file")
-                    # Clear any existing precision count data
+
                     if st.session_state.day_7_processed is not None:
                         if st.button("Clear existing Day 7 precision count"):
                             st.session_state.day_7_processed = None
                             st.rerun()
 
-
-# TAB 4: GATE NAMES (keeping same as original)
 with tab_gates:
     st.header("Gate mapping")
     st.markdown("""
     Add gate naming information to enable better plotting and analysis downstream.
     """)
-    
-    # Check prerequisites
+
     has_day_0 = st.session_state.day_0_df is not None
     has_day_7 = st.session_state.day_7_df is not None
-    
+
     if not has_day_0 or not has_day_7:
         st.info("Process Day 0 and Day 7 data first to auto-generate gate names")
-    
-    # Option 1: Upload pre-generated
+
     st.subheader("Upload an existing mapping")
     uploaded_gates = st.file_uploader(
         "Upload gate names file",
         type=['xlsx', 'xls', 'csv'],
         key="gates_upload"
     )
-    
+
     if uploaded_gates:
         try:
             if uploaded_gates.name.endswith('.csv'):
                 gates_df = pd.read_csv(uploaded_gates)
             else:
                 gates_df = pd.read_excel(uploaded_gates)
-            
+
             st.session_state.gate_names_df = gates_df
             st.success(f"Gate names loaded: {len(gates_df)} entries")
             st.dataframe(gates_df.head(), use_container_width=True)
         except Exception as e:
             st.error(f"Error loading gate names: {str(e)}")
-    
-    # Option 2: Auto-generate (if modules available)
+
     if GATE_NAMER_AVAILABLE and has_day_0 and has_day_7:
         st.divider()
         st.subheader("Generate from flow columns")
         st.caption("Uses the project’s fixed naming and classification rules. No external service is used.")
-        
+
         if st.button("Generate gate mapping", type="primary"):
             with st.spinner("Generating gate names from column headers..."):
                 try:
-                    # Get all unique column names from both files (excluding sample_name)
-                    # Use case-insensitive deduplication
+
                     day_0_cols = set(st.session_state.day_0_df.columns) - {'sample_name'}
                     day_7_cols = set(st.session_state.day_7_df.columns) - {'sample_name'}
-                    
-                    # Combine and deduplicate by lowercase
+
                     all_columns_lower = {}
                     for col in day_0_cols:
                         all_columns_lower[col.lower()] = col
                     for col in day_7_cols:
                         if col.lower() not in all_columns_lower:
                             all_columns_lower[col.lower()] = col
-                    
+                    for day_data in st.session_state.additional_days.values():
+                        flow_df = day_data["flow_df"]
+                        if flow_df is not None:
+                            for col in set(flow_df.columns) - {"sample_name"}:
+                                if col.lower() not in all_columns_lower:
+                                    all_columns_lower[col.lower()] = col
+
                     all_columns = sorted(all_columns_lower.values())
-                    
+
                     if not all_columns:
                         st.error("No columns found to generate gate names from")
                     else:
                         st.info(f"Processing {len(all_columns)} unique columns (case-insensitive)")
-                        
+
                         gate_names_mapping = generate_gate_mapping(
                             st.session_state.day_0_df,
                             st.session_state.day_7_df,
+                            [day_data["flow_df"] for day_data in st.session_state.additional_days.values()
+                             if day_data["flow_df"] is not None],
                         )
-                        
-                        # Get statistics for user feedback
+
                         total_combos = len(gate_names_mapping)
                         unique_names = gate_names_mapping['plot_name'].nunique()
                         duplicates_removed = total_combos - unique_names
-                        
+
                         st.session_state.gate_names_df = gate_names_mapping
-                        
-                        # Show success with deduplication info
+
                         st.success(f"Generated {unique_names} unique plot names from {total_combos} gate/metric combinations!")
-                        
+
                         if duplicates_removed > 0:
                             st.info(f"Deduplicated {duplicates_removed} case-variant duplicates (e.g., 'Tconv' vs 'tconv' vs 'TCONV')")
-                        
-                        # Show quick stats
+
                         col1, col2, col3 = st.columns(3)
                         with col1:
                             st.metric("Original Combinations", total_combos)
@@ -1366,24 +1248,22 @@ with tab_gates:
                         with col3:
                             reduction_pct = int((duplicates_removed / total_combos * 100)) if total_combos > 0 else 0
                             st.metric("Reduction", f"{reduction_pct}%", delta=f"-{duplicates_removed}")
-                        
+
                         st.rerun()
-                        
+
                 except Exception as e:
                     st.error(f"Error generating gate names: {str(e)}")
                     import traceback
                     with st.expander("View error details"):
                         st.code(traceback.format_exc())
-                    st.info("You can still upload a pre-generated gate names file instead")
-    
-    # Show gate names preview if available
+                    st.info("Alternatively, upload a pre-generated gate-name file.")
+
     if st.session_state.gate_names_df is not None:
         st.divider()
         st.subheader("Review and edit mapping")
-        
+
         gate_df = st.session_state.gate_names_df
-        
-        # Summary metrics
+
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Total Gates", len(gate_df))
@@ -1396,11 +1276,9 @@ with tab_gates:
         with col4:
             if 'metric' in gate_df.columns:
                 st.metric("Freq Metrics", gate_df['metric'].astype(str).str.contains('Freq', case=False).sum())
-        
-        # Show info about columns
+
         st.info(f"**Columns:** {', '.join(gate_df.columns.tolist())} | Click cells to edit, toggle checkboxes in 'for_graphing' column")
-        
-        # Use data_editor with checkbox column configuration
+
         column_config = {}
         if 'for_graphing' in gate_df.columns:
             column_config['for_graphing'] = st.column_config.CheckboxColumn(
@@ -1408,7 +1286,7 @@ with tab_gates:
                 help="Include in graphs?",
                 default=True
             )
-        
+
         edited_gate_df = st.data_editor(
             gate_df,
             use_container_width=True,
@@ -1417,36 +1295,34 @@ with tab_gates:
             column_config=column_config,
             key="gate_names_editor"
         )
-        
-        # Update session state with edited data
+
         if not edited_gate_df.equals(st.session_state.gate_names_df):
             st.session_state.gate_names_df = edited_gate_df
             st.success("Gate names updated!")
-        
-        # Quick selection actions
+
         if 'for_graphing' in gate_df.columns:
             st.divider()
             st.subheader("Quick Selection Actions")
-            
+
             col_a1, col_a2, col_a3, col_a4 = st.columns(4)
-            
+
             with col_a1:
                 if st.button("Select All", use_container_width=True, key="select_all_gates"):
                     st.session_state.gate_names_df['for_graphing'] = True
                     st.rerun()
-            
+
             with col_a2:
                 if st.button("Deselect All", use_container_width=True, key="deselect_all_gates"):
                     st.session_state.gate_names_df['for_graphing'] = False
                     st.rerun()
-            
+
             with col_a3:
                 if st.button("Only Counts", use_container_width=True, key="only_counts_gates"):
                     if 'metric' in st.session_state.gate_names_df.columns:
                         st.session_state.gate_names_df['for_graphing'] = \
                             st.session_state.gate_names_df['metric'].astype(str).str.fullmatch('Count', case=False)
                         st.rerun()
-            
+
             with col_a4:
                 if st.button("Exclude MFIs", use_container_width=True, key="exclude_mfi_gates"):
                     if 'metric' in st.session_state.gate_names_df.columns:
@@ -1456,15 +1332,13 @@ with tab_gates:
     else:
         st.info("Gate names are optional but recommended for better visualizations")
 
-
-# TAB 5: VALIDATION
 with tab_validation:
     st.header("Validation")
-    
+
     has_day_0 = st.session_state.day_0_df is not None
     has_day_7 = st.session_state.day_7_df is not None
     has_metadata = st.session_state.metadata_df is not None
-    
+
     if not (has_day_0 and has_day_7):
         st.warning("Please process Day 0 and Day 7 data first")
     else:
@@ -1476,25 +1350,33 @@ with tab_validation:
             if column_check.get('case_mismatches') and column_check.get('canonical_map'):
                 st.session_state.day_7_df = validator.standardize_day_7_to_day_0(
                     st.session_state.day_7_df, column_check['canonical_map'])
+            additional_days_for_validation = {}
+            for day_number, day_data in st.session_state.additional_days.items():
+                flow_df = day_data["flow_df"]
+                if flow_df is not None:
+                    flow_df = validator.standardize_day_7_to_day_0(
+                        flow_df, column_check["canonical_map"])
+                    day_data["flow_df"] = flow_df
+                    additional_days_for_validation[day_number] = (
+                        flow_df, day_data["precision_df"]
+                    )
             st.session_state.validation_results = run_checks(
                 st.session_state.day_0_df, st.session_state.day_7_df,
                 st.session_state.metadata_df, st.session_state.day_0_processed,
-                st.session_state.day_7_processed)
+                st.session_state.day_7_processed, additional_days_for_validation)
             st.session_state.validation_acknowledged = False
             st.session_state.workflow_stage = 'export'
             st.rerun()
-        
-        if False:  # Retained temporarily for compatibility with older saved sessions.
+
+        if False:
             validator = DataValidator()
-            
-            # Column consistency check
+
             st.subheader("Column Consistency Check")
             col_validation = validator.validate_column_consistency(
                 st.session_state.day_0_df,
                 st.session_state.day_7_df
             )
 
-            # Apply standardization if not already done
             if col_validation.get('case_mismatches') and col_validation.get('canonical_map'):
                 st.info("⚙ Applying automatic column standardization...")
                 st.session_state.day_7_df = validator.standardize_day_7_to_day_0(
@@ -1502,40 +1384,38 @@ with tab_validation:
                     col_validation['canonical_map']
                 )
                 st.success("Day 7 columns standardized to Day 0 casing")
-                
-                # Re-validate after standardization
+
                 col_validation = validator.validate_column_consistency(
                     st.session_state.day_0_df,
                     st.session_state.day_7_df
                 )
-            
+
             if col_validation['valid']:
                 st.success("All columns match between Day 0 and Day 7!")
             else:
                 st.warning("Column mismatches detected")
-                
+
                 if col_validation['only_in_day_0']:
                     with st.expander(f"Columns only in Day 0 ({len(col_validation['only_in_day_0'])})"):
                         for col in sorted(col_validation['only_in_day_0']):
                             st.code(col, language=None)
-                
+
                 if col_validation['only_in_day_7']:
                     with st.expander(f"Columns only in Day 7 ({len(col_validation['only_in_day_7'])})"):
                         for col in sorted(col_validation['only_in_day_7']):
                             st.code(col, language=None)
-                
+
                 if col_validation['case_mismatches']:
                     with st.expander(f"Case mismatches ({len(col_validation['case_mismatches'])})"):
                         for col_lower, cases in col_validation['case_mismatches'].items():
                             st.markdown(f"- Day 0: `{cases['day_0']}` vs Day 7: `{cases['day_7']}`")
-            
+
             st.divider()
-            
-            # Sample validation
+
             st.subheader("Sample Name Validation")
-            
+
             col1, col2 = st.columns(2)
-            
+
             with col1:
                 st.markdown("**Day 0:**")
                 day_0_val = validator.validate_sample_names(
@@ -1543,7 +1423,7 @@ with tab_validation:
                     st.session_state.metadata_df
                 )
                 validator.display_validation_results(day_0_val, "Day 0 Samples")
-            
+
             with col2:
                 st.markdown("**Day 7:**")
                 day_7_val = validator.validate_sample_names(
@@ -1551,7 +1431,7 @@ with tab_validation:
                     st.session_state.metadata_df
                 )
                 validator.display_validation_results(day_7_val, "Day 7 Samples")
-            
+
             st.divider()
 
             st.subheader("Frequency Data Validation")
@@ -1590,12 +1470,11 @@ with tab_validation:
 
             st.divider()
 
-            # Precision count validation - only if data exists
             if st.session_state.day_0_processed is not None or st.session_state.day_7_processed is not None:
                 st.subheader("Precision Count Validation")
-                
+
                 col1, col2 = st.columns(2)
-                
+
                 with col1:
                     st.markdown("**Day 0:**")
                     if st.session_state.day_0_processed is not None:
@@ -1603,7 +1482,7 @@ with tab_validation:
                         validator.display_validation_results(pc_val_0, "Day 0 Precision Counts")
                     else:
                         st.info("Precision count data not included for Day 0")
-                
+
                 with col2:
                     st.markdown("**Day 7:**")
                     if st.session_state.day_7_processed is not None:
@@ -1611,8 +1490,7 @@ with tab_validation:
                         validator.display_validation_results(pc_val_7, "Day 7 Precision Counts")
                     else:
                         st.info("Precision count data not included for Day 7")
-            
-            # Store validation results
+
             st.session_state.validation_results = {
                 'column': col_validation,
                 'day_0_samples': day_0_val,
@@ -1622,12 +1500,12 @@ with tab_validation:
                 'day_0_duplicate_columns': day_0_duplicate_val,
                 'day_7_duplicate_columns': day_7_duplicate_val
             }
-            
+
             st.session_state.workflow_stage = 'export'
-            
+
             st.divider()
             st.success("Validation complete. Continue to Export.")
-        
+
         if st.session_state.validation_results:
             current_results = run_checks(
                 st.session_state.day_0_df,
@@ -1635,6 +1513,11 @@ with tab_validation:
                 st.session_state.metadata_df,
                 st.session_state.day_0_processed,
                 st.session_state.day_7_processed,
+                {
+                    day_number: (day_data["flow_df"], day_data["precision_df"])
+                    for day_number, day_data in st.session_state.additional_days.items()
+                    if day_data["flow_df"] is not None
+                },
             )
             st.session_state.validation_results = current_results
             render_validation_summary(current_results)
@@ -1645,7 +1528,16 @@ with tab_validation:
                 day_7_val=current_results.get('day_7_samples'),
                 column_val=current_results.get('column')
             )
-            
+            findings = build_findings(current_results)
+            if not findings.empty:
+                report += "\n## Actionable findings across all processed days\n\n"
+                for _, finding in findings.iterrows():
+                    report += (
+                        f"- **{finding['Priority']} — {finding['Check']} "
+                        f"({finding['Dataset']}):** {finding['Finding']} "
+                        f"Recommended action: {finding['Recommended action']}\n"
+                    )
+
             st.download_button(
                 label="Download Validation Report",
                 data=report,
@@ -1653,28 +1545,191 @@ with tab_validation:
                 mime="text/markdown"
             )
 
+with tab_additional_days:
+    st.header("Additional days")
+    st.markdown("Days found in the metadata `day` column are added automatically. Use this tab to add any others.")
+    available_days = [
+        day for day in range(1, 366)
+        if day != 7 and day not in st.session_state.additional_days
+    ]
+    selected_days = st.multiselect(
+        "Days to add",
+        options=available_days,
+        format_func=lambda day: f"Day {day}",
+        key="selected_additional_days",
+        help="Select one or more collection days. Day 0 and Day 7 have dedicated tabs.",
+    )
+    if st.button("Add selected days", type="primary", key="add_additional_day", disabled=not selected_days):
+        for day_number in selected_days:
+            st.session_state.additional_days[int(day_number)] = {
+                "flow_df": None,
+                "precision_df": None,
+                "cleaning_summary": None,
+            }
+        st.rerun()
 
-# TAB 6: EXPORT (UPDATED FOR OPTIONAL PRECISION COUNTS)
+    if st.session_state.additional_days:
+        st.subheader("Added days")
+        for day_number in sorted(st.session_state.additional_days):
+            st.write(f"Day {day_number}")
+    else:
+        st.info("No additional days have been added.")
+
+for day_number, day_tab in zip(additional_day_numbers, additional_day_tabs):
+    with day_tab:
+        day_data = st.session_state.additional_days[day_number]
+        day_label = f"Day {day_number}"
+        st.header(f"{day_label} data")
+        uploaded_files = st.file_uploader(
+            f"Upload {day_label} file(s)",
+            type=["xlsx", "xls", "csv"],
+            accept_multiple_files=True,
+            key=f"additional_day_{day_number}_files",
+        )
+        cleaning_method = st.selectbox(
+            "Sample name cleaning",
+            options=["none", "donor_asterisk", "separator", "regex"],
+            key=f"additional_day_{day_number}_cleaning",
+            format_func=lambda method: {
+                "none": "No cleaning needed",
+                "donor_asterisk": "DonorX*_B2_ format",
+                "separator": "Split by separator",
+                "regex": "Custom regex pattern",
+            }[method],
+        )
+        separator = "_"
+        skip_parts = 2
+        regex_pattern = None
+        if cleaning_method == "separator":
+            separator = st.text_input(
+                "Separator character", value="_", key=f"additional_day_{day_number}_separator"
+            )
+            skip_parts = st.number_input(
+                "Parts to skip from start", min_value=0, max_value=10, value=2,
+                key=f"additional_day_{day_number}_skip_parts",
+            )
+        elif cleaning_method == "regex":
+            regex_pattern = st.text_input(
+                "Regex pattern to remove",
+                value=r"^[^_]*\*_[^_]*_",
+                key=f"additional_day_{day_number}_regex",
+            )
+        remove_fmo = st.checkbox(
+            "Remove FMO samples", value=True, key=f"additional_day_{day_number}_remove_fmo"
+        )
+
+        if st.button(
+            f"Process {day_label} files",
+            type="primary",
+            key=f"process_additional_day_{day_number}",
+            disabled=not uploaded_files,
+        ):
+            cleaner = FlowDataCleaner()
+            flow_df, summary = cleaner.process_files(
+                uploaded_files=uploaded_files,
+                cleaning_method=cleaning_method,
+                separator=separator,
+                skip_parts=int(skip_parts),
+                regex_pattern=regex_pattern,
+                remove_fmo=remove_fmo,
+                metadata_df=st.session_state.metadata_df,
+                merge_type="auto",
+            )
+            if flow_df is None:
+                st.error(f"{day_label} files could not be processed.")
+            else:
+                flow_df, removed_mean_sd = filter_summary_rows(flow_df)
+                summary["mean_sd_removed"] = removed_mean_sd
+                if "sample_name" in flow_df.columns:
+                    flow_df = flow_df[
+                        ["sample_name"] + [col for col in flow_df.columns if col != "sample_name"]
+                    ]
+                day_data["flow_df"] = flow_df
+                day_data["precision_df"] = None
+                day_data["cleaning_summary"] = summary
+                st.rerun()
+
+        if day_data["flow_df"] is not None:
+            st.dataframe(day_data["flow_df"].head(10), use_container_width=True)
+            if day_data["cleaning_summary"]:
+                render_merge_qc_summary(day_data["cleaning_summary"], day_label)
+
+            flow_df = day_data["flow_df"]
+            numeric_columns = [
+                column for column in flow_df.columns
+                if pd.api.types.is_numeric_dtype(flow_df[column])
+            ]
+            if numeric_columns:
+                detected_bead = detect_bead_count_column(flow_df)
+                bead_column = st.selectbox(
+                    "Bead count column",
+                    options=numeric_columns,
+                    index=numeric_columns.index(detected_bead) if detected_bead in numeric_columns else 0,
+                    key=f"additional_day_{day_number}_bead_column",
+                )
+                bead_concentration = st.number_input(
+                    "Bead concentration (per mL)", min_value=0.0, value=1.00e6,
+                    format="%.2e", key=f"additional_day_{day_number}_bead_concentration",
+                )
+                bead_volume = st.number_input(
+                    "Bead volume (µL)", min_value=0, value=50, step=5,
+                    key=f"additional_day_{day_number}_bead_volume",
+                )
+                sample_volume = st.number_input(
+                    "Sample volume (µL)", min_value=0, value=150, step=10,
+                    key=f"additional_day_{day_number}_sample_volume",
+                )
+                if st.button(
+                    f"Generate {day_label} precision count",
+                    key=f"generate_additional_day_{day_number}_precision",
+                ):
+                    settings = PrecisionCountSettings(
+                        bead_concentration,
+                        concentration_per_microlitre(bead_concentration),
+                        bead_volume,
+                        sample_volume,
+                    )
+                    day_data["precision_df"] = create_precision_count_table(
+                        flow_df, bead_column, settings
+                    )
+                    st.rerun()
+            else:
+                st.warning(f"No numeric bead-count column is available for {day_label}.")
+
+            if day_data["precision_df"] is not None:
+                st.subheader(f"{day_label} precision count")
+                day_data["precision_df"] = st.data_editor(
+                    day_data["precision_df"],
+                    use_container_width=True,
+                    num_rows="dynamic",
+                    key=f"additional_day_{day_number}_precision_editor",
+                )
+
 with tab_export:
     st.header("Export")
-    
-    # Updated prerequisites - flow data is required, precision counts are optional
+
     has_day_0_flow = st.session_state.day_0_df is not None
     has_day_7_flow = st.session_state.day_7_df is not None
     has_day_0_precision = st.session_state.day_0_processed is not None
     has_day_7_precision = st.session_state.day_7_processed is not None
     has_metadata = st.session_state.metadata_df is not None
     has_gates = st.session_state.gate_names_df is not None
-    
+
     if not (has_day_0_flow and has_day_7_flow):
         st.warning("Please process Day 0 and Day 7 flow data first")
     else:
         st.markdown("### Master workbook")
-        
-        # Calculate completion - dynamic sheet count
-        total_sheets = 2  # Day 0 and Day 7 flow data (minimum)
-        completed = 2  # Always have Day 0 and Day 7 flow
-        
+
+        total_sheets = 2
+        completed = 2
+        for day_data in st.session_state.additional_days.values():
+            if day_data["flow_df"] is not None:
+                total_sheets += 1
+                completed += 1
+            if day_data["precision_df"] is not None:
+                total_sheets += 1
+                completed += 1
+
         if has_day_0_precision:
             total_sheets += 1
             completed += 1
@@ -1687,42 +1742,40 @@ with tab_export:
         if has_metadata:
             total_sheets += 1
             completed += 1
-        
+
         completion_pct = int((completed / total_sheets) * 100)
-        
+
         st.progress(completion_pct / 100, text=f"Master file: {completion_pct}% complete ({completed}/{total_sheets} sheets)")
-        
-        # Show what's included
+
         col1, col2, col3 = st.columns(3)
-        
+
         with col1:
             st.metric("Day 0 Flow Data", len(st.session_state.day_0_df), delta="")
             if has_day_0_precision:
                 st.metric("Day 0 Precision", len(st.session_state.day_0_processed), delta="")
             else:
                 st.metric("Day 0 Precision", "Not included", delta="Skipped")
-        
+
         with col2:
             st.metric("Day 7 Flow Data", len(st.session_state.day_7_df), delta="")
             if has_day_7_precision:
                 st.metric("Day 7 Precision", len(st.session_state.day_7_processed), delta="")
             else:
                 st.metric("Day 7 Precision", "Not included", delta="Skipped")
-        
+
         with col3:
             if has_gates:
                 st.metric("Gate Names", len(st.session_state.gate_names_df), delta="")
             else:
                 st.metric("Gate Names", "Not included", delta="Missing")
-            
+
             if has_metadata:
                 st.metric("Metadata", len(st.session_state.metadata_df), delta="")
             else:
                 st.metric("Metadata", "Not included", delta="Missing")
-        
+
         st.divider()
-        
-        # Show what will be included
+
         st.info("**Sheets to be included in master file:**")
         sheets_list = []
         sheets_list.append("day_0_flow_data")
@@ -1731,11 +1784,16 @@ with tab_export:
         sheets_list.append("day_7_flow_data")
         if has_day_7_precision:
             sheets_list.append("day_7_precision_count")
+        for day_number, day_data in sorted(st.session_state.additional_days.items()):
+            if day_data["flow_df"] is not None:
+                sheets_list.append(f"day_{day_number}_flow_data")
+            if day_data["precision_df"] is not None:
+                sheets_list.append(f"day_{day_number}_precision_count")
         if has_gates:
             sheets_list.append("name_mapping")
         if has_metadata:
             sheets_list.append("metadata")
-        
+
         for sheet in sheets_list:
             st.markdown(f"- {sheet}")
 
@@ -1808,11 +1866,12 @@ with tab_export:
                         st.warning("No lineage text files were generated for the selected lineages.")
             else:
                 st.info("No gating names available to build a tree preview.")
-        
+
         st.divider()
-        
+
         merge_conflict_count = sum(len((summary or {}).get("merge_conflicts", [])) for summary in (
-            st.session_state.day_0_cleaning_summary, st.session_state.day_7_cleaning_summary))
+            st.session_state.day_0_cleaning_summary, st.session_state.day_7_cleaning_summary,
+            *(day_data["cleaning_summary"] for day_data in st.session_state.additional_days.values())))
         if merge_conflict_count:
             st.warning(f"{merge_conflict_count} conflicting repeated measurements remain. Review them before export; the first encountered value will be retained in the workbook.")
 
@@ -1833,7 +1892,6 @@ with tab_export:
         if acknowledgement_required and validation_acknowledged:
             st.success("Validation findings acknowledged. The master workbook can be prepared.")
 
-        # Generate master file
         if st.button("Prepare master workbook", type="primary", use_container_width=True,
                      disabled=not validation_acknowledged):
             output = build_master_workbook(
@@ -1843,8 +1901,13 @@ with tab_export:
                 st.session_state.day_7_processed if has_day_7_precision else None,
                 st.session_state.gate_names_df if has_gates else None,
                 st.session_state.metadata_df if has_metadata else None,
+                {
+                    day_number: (day_data["flow_df"], day_data["precision_df"])
+                    for day_number, day_data in st.session_state.additional_days.items()
+                    if day_data["flow_df"] is not None
+                },
             )
-            
+
             st.download_button(
                 label=f"Download master workbook ({completed} sheets)",
                 data=output,
@@ -1852,10 +1915,9 @@ with tab_export:
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-            
+
             st.success(f"Master file generated with {completed} sheets!")
-            
-            # Show info about what wasn't included
+
             not_included = []
             if not has_day_0_precision:
                 not_included.append("Day 0 precision count")
@@ -1865,70 +1927,62 @@ with tab_export:
                 not_included.append("Gate names")
             if not has_metadata:
                 not_included.append("Metadata")
-            
+
             if not_included:
                 st.info(f"**Not included:** {', '.join(not_included)}")
 
-
-# Footer
 st.divider()
 with st.expander("User guide"):
     st.markdown("""
-    ### Quick Start Guide
+    ### Workflow Guide
     
     **Workflow:**
     
     1. **Metadata** (Tab 1)
-       - Upload your metadata file first
-       - This enables validation throughout the process
+       - Upload metadata before processing flow data.
+       - Metadata supports sample-name validation.
     
     2. **Day 0 Data** (Tab 2)
-       - Upload one or more Day 0 files
-       - Choose cleaning method if needed
-       - Remove FMO samples automatically
-       - Mean and SD summary rows removed automatically
-       - **Optional:** Generate precision count table (uncheck if not captured)
-       - View intra-day validation results
+       - Upload one or more Day 0 files.
+       - Select a sample-name cleaning method if required.
+       - FMO samples and Mean/SD summary rows are removed during processing.
+       - Optionally generate a precision-count table.
+       - Review intra-day validation results.
     
     3. **Day 7 Data** (Tab 3)
-       - Repeat for Day 7 files
-       - Same cleaning options available
-       - Mean and SD summary rows removed automatically
-       - **Optional:** Generate precision count table (uncheck if not captured)
-       - View intra-day validation results
+       - Upload one or more Day 7 files.
+       - Select a sample-name cleaning method if required.
+       - FMO samples and Mean/SD summary rows are removed during processing.
+       - Optionally generate a precision-count table.
+       - Review intra-day validation results.
     4. **Gate Names** (Tab 4) - Optional
-       - Upload or auto-generate gate names
-       - Improves downstream plotting
+       - Upload or generate gate names.
+       - Use the mapping for downstream plotting.
     
     5. **Validation** (Tab 5)
-       - Run comprehensive checks
-       - Validates columns, samples, and counts
-       - Export validation report
+       - Run validation checks for columns, samples, frequencies, and counts.
+       - Download the validation report.
     
     6. **Export** (Tab 6)
-       - Download master file with 2-6 sheets (dynamic)
-       - Includes all available processed data
+       - Download the master workbook with available data sheets.
     
     **About Precision Counts:**
     
-    - If you don't have precision count beads for one or both days, simply uncheck the box
-    - The master file will only include sheets for data you've generated
-    - Minimum 2 sheets (Day 0 and Day 7 flow data), maximum 6 sheets
+    - Disable precision-count collection when bead data is unavailable for a day.
+    - The workbook includes Day 0 and Day 7 flow data and any available optional sheets.
     
     **Cleaning Methods:**
     
     - **None**: Files are already clean
-    - **DonorX*_B2_**: Preset for "Donor1*_B2_Sample" format
-    - **Separator**: Split by custom character
-    - **Regex**: Advanced pattern matching
+    - **DonorX*_B2_**: Preset for the `Donor1*_B2_Sample` format.
+    - **Separator**: Split by a specified character.
+    - **Regex**: Match a regular-expression pattern.
     
     **Tips:**
     
-    - Upload metadata first for best validation
-    - Use the same cleaning settings for Day 0 and Day 7
-    - Check intra-day validation warnings in each tab
-    - Review all validation results before exporting
-    - Master file adapts to include only the data you've generated
+    - Upload metadata before processing to enable sample comparisons.
+    - Use consistent cleaning settings for Day 0 and Day 7.
+    - Review intra-day and final validation findings before export.
     """)
 
 st.sidebar.divider()

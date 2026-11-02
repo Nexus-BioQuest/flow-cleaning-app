@@ -13,17 +13,15 @@ from typing import Dict, List, Tuple
 
 import pandas as pd
 
-
 def _print_dataframe_summary(label: str, df: pd.DataFrame) -> None:
-    """Print a compact summary of the dataframe for the user."""
+    """Print row, column, and sample/name-column counts."""
     print(f"[{label}] rows={len(df)} columns={len(df.columns)}")
     if not df.empty:
         sample_cols = [col for col in df.columns if "sample" in col.lower() or "name" in col.lower()]
         print(f"[{label}] sample/name columns detected={len(sample_cols)}")
 
-
 def _print_overlap_report(label: str, left: pd.DataFrame, right: pd.DataFrame, join_key: str) -> None:
-    """Print a simple overlap summary for a merge key."""
+    """Print the count of shared non-null join-key values."""
     if join_key not in left.columns or join_key not in right.columns:
         print(f"[{label}] join key '{join_key}' missing from one or both dataframes")
         return
@@ -33,9 +31,8 @@ def _print_overlap_report(label: str, left: pd.DataFrame, right: pd.DataFrame, j
     overlap = sorted(left_values & right_values)
     print(f"[{label}] join key '{join_key}' overlap count={len(overlap)}")
 
-
 def _find_join_key(df: pd.DataFrame) -> str | None:
-    """Find the most likely sample/name column to use as a merge key."""
+    """Choose a supported sample identifier column as the join key."""
     candidates = [
         "sample_id",
         "sample",
@@ -56,9 +53,8 @@ def _find_join_key(df: pd.DataFrame) -> str | None:
             return col
     return None
 
-
 def _print_duplicate_summary(label: str, df: pd.DataFrame, join_key: str) -> None:
-    """Report duplicate join-key values before merging."""
+    """Print the number of duplicate non-null join-key values."""
     if join_key not in df.columns:
         return
     duplicates = df[join_key].dropna().astype(str)
@@ -68,20 +64,17 @@ def _print_duplicate_summary(label: str, df: pd.DataFrame, join_key: str) -> Non
     else:
         print(f"[{label}] duplicate join-key values detected for '{join_key}' count=0")
 
-
 def _deduplicate_rows(df: pd.DataFrame) -> pd.DataFrame:
     """Drop duplicate rows while preserving the last occurrence."""
     if df.empty:
         return df
     return df.drop_duplicates(keep="last").reset_index(drop=True)
 
-
 FLOW_SHEET_HINTS = ("flow_data", "precision_count")
 NAME_MAPPING_SHEET_HINTS = ("name_mapping", "gate_name", "gate_names")
 
-
 def merge_columns(left: pd.DataFrame, right: pd.DataFrame, sheet_name: str) -> pd.DataFrame:
-    """Merge two dataframes by aligning on sample identifiers when possible."""
+    """Join on a shared sample identifier or align columns by index."""
     left_df = left.reset_index(drop=True)
     right_df = right.reset_index(drop=True)
 
@@ -110,9 +103,8 @@ def merge_columns(left: pd.DataFrame, right: pd.DataFrame, sheet_name: str) -> p
     print(f"[{sheet_name}] merged columns before dedupe = {len(merged.columns)}")
     return _deduplicate_rows(merged)
 
-
 def merge_rows(left: pd.DataFrame, right: pd.DataFrame, sheet_name: str) -> pd.DataFrame:
-    """Stack rows from the second workbook underneath the first."""
+    """Append rows and remove exact duplicates."""
     left_df = left.reset_index(drop=True)
     right_df = right.reset_index(drop=True)
 
@@ -125,9 +117,8 @@ def merge_rows(left: pd.DataFrame, right: pd.DataFrame, sheet_name: str) -> pd.D
     print(f"[{sheet_name}] stacked rows after dedupe = {len(deduped)}")
     return deduped
 
-
 def merge_sheet(sheet_name: str, left: pd.DataFrame, right: pd.DataFrame) -> pd.DataFrame:
-    """Merge two sheets using the sheet name to choose a strategy."""
+    """Select the merge strategy using the sheet name."""
     normalized_name = sheet_name.lower()
     if any(hint in normalized_name for hint in NAME_MAPPING_SHEET_HINTS):
         return merge_rows(left, right, sheet_name)
@@ -135,9 +126,8 @@ def merge_sheet(sheet_name: str, left: pd.DataFrame, right: pd.DataFrame) -> pd.
         return merge_columns(left, right, sheet_name)
     return merge_rows(left, right, sheet_name)
 
-
 def merge_master_files(base_path: str | Path, other_path: str | Path, output_path: str | Path) -> Path:
-    """Merge two master Excel files into a new workbook."""
+    """Merge workbook sheets and write the result to the output path."""
     base_path = Path(base_path)
     other_path = Path(other_path)
     output_path = Path(output_path)
@@ -170,14 +160,12 @@ def merge_master_files(base_path: str | Path, other_path: str | Path, output_pat
 
     return output_path
 
-
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Merge two exported flow cytometry master Excel files")
-    parser.add_argument("--base", required=True, help="Path to the master file you want to keep as the base")
-    parser.add_argument("--other", required=True, help="Path to the second master file to pull in extra columns/rows")
-    parser.add_argument("--output", required=True, help="Where to save the merged workbook")
+    parser.add_argument("--base", required=True, help="Base master workbook to retain when merging")
+    parser.add_argument("--other", required=True, help="Second master workbook to merge")
+    parser.add_argument("--output", required=True, help="Output path for the merged workbook")
     return parser
-
 
 def main() -> None:
     parser = build_arg_parser()
@@ -185,7 +173,6 @@ def main() -> None:
 
     output_path = merge_master_files(args.base, args.other, args.output)
     print(f"Merged workbook written to: {output_path}")
-
 
 if __name__ == "__main__":
     main()

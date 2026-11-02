@@ -30,12 +30,13 @@ PowerShell execution-policy changes are not required.
 
 ## Precision counts and the absolute-count formula
 
-Bead concentration is entered once in beads per mL. The sidebar displays beads
-per µL as a live derived value (`per mL ÷ 1,000`), and the same derived value is
+Bead concentration, bead volume and sample volume are set in each day's own tab,
+so they can differ between days. Bead concentration is entered in beads per mL;
+the tab displays beads per µL as a live derived value (`per mL ÷ 1,000`), which is
 used in precision-count exports.
 
 The `day_0_precision_count` / `day_7_precision_count` sheets carry the inputs the
-QC step needs to convert Day 7 gated event counts to absolute cells per well:
+QC step needs to convert gated event counts to absolute cells per well:
 
 ```
 absolute count [cells/well] = (N_events × V_bead) / (N_beads × V_sample) × C_beads × V_well
@@ -48,7 +49,16 @@ absolute count [cells/well] = (N_events × V_bead) / (N_beads × V_sample) × C_
 | N_beads | precision-count beads recorded | `recorded_bead_count` | events |
 | V_sample | sample volume acquired | `sample_volume_ul` | µL |
 | C_beads | precision-count bead concentration | `bead_concentration_per_ul` | beads/µL |
-| V_well | total well volume (200 for standard plates) | QC sidebar constant | µL |
+| V_well | total well volume (200 for standard plates) | fixed QC constant | µL |
+
+Days listed in the metadata `day` column (other than 0 and 7) get their tabs
+automatically on upload. Use the **Additional days** tab to add any others beyond Day 0 and Day 7.
+Each added day gets its own tab for uploading and processing files and
+generating optional precision counts. The workbook includes that day's
+flow-data sheet and, when generated, its precision-count sheet (for example,
+`day_14_flow_data` and `day_14_precision_count`).
+Validation checks each processed day for sample-name, frequency, duplicate
+column, and precision-count issues, and compares each day's columns with Day 0.
 
 ## Structure
 

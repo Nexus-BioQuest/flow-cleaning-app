@@ -1,4 +1,4 @@
-"""Pure precision-count transformations."""
+"""Precision-count conversions and table construction."""
 from __future__ import annotations
 from dataclasses import dataclass
 import pandas as pd
@@ -17,7 +17,7 @@ def concentration_per_microlitre(concentration_per_ml: float) -> float:
     return concentration_per_ml / 1000
 
 def detect_bead_count_column(df: pd.DataFrame) -> str | None:
-    """Select the first numeric column matching the documented priority rules."""
+    """Select the highest-priority numeric bead-count column, if present."""
     numeric = [column for column in df.columns if pd.api.types.is_numeric_dtype(df[column])]
     priorities = (
         lambda name: "bead" in name and "count" in name,

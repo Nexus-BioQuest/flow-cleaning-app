@@ -38,7 +38,7 @@ def test_cleaning_fixture_removes_only_documented_rows_and_duplicate_column():
     path = FIXTURES / "cleaning_edge_cases.csv"
     cleaned, summary = FlowDataCleaner().process_files([UploadedFixture(path)], remove_fmo=True)
     assert cleaned["sample_name"].tolist() == ["S1", "S2", "Mean", "SD"]
-    # Mean/SD removal is performed explicitly by the app after the general cleaner.
+    # Mean/SD rows are removed in the application pipeline.
     assert cleaned.columns.tolist() == ["sample_name", "Population | Count"]
     assert summary["fmo_removed"] == 1
 

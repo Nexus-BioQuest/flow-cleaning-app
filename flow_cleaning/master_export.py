@@ -1,4 +1,4 @@
-"""Master-workbook assembly with the original sheet names and schemas."""
+"""Assemble master workbooks with stable sheet names and schemas."""
 from __future__ import annotations
 from io import BytesIO
 import re
@@ -88,14 +88,21 @@ def _write_tree_image_sheet(writer: pd.ExcelWriter, mapping: pd.DataFrame) -> No
     sheet.add_image(Image(image_data), "A1")
 
 def build_master_workbook(day_0: pd.DataFrame, day_7: pd.DataFrame, day_0_precision=None,
-                          day_7_precision=None, gate_names=None, metadata=None) -> bytes:
-    """Return the same workbook sheets produced by the original Streamlit block."""
+                          day_7_precision=None, gate_names=None, metadata=None,
+                          additional_days: dict[int, tuple[pd.DataFrame, pd.DataFrame | None]] | None = None) -> bytes:
+    """Build workbook sheets from available flow, precision, gate, and metadata data."""
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         day_0.to_excel(writer, index=False, sheet_name="day_0_flow_data")
         day_7.to_excel(writer, index=False, sheet_name="day_7_flow_data")
         if day_0_precision is not None: day_0_precision.to_excel(writer, index=False, sheet_name="day_0_precision_count")
         if day_7_precision is not None: day_7_precision.to_excel(writer, index=False, sheet_name="day_7_precision_count")
+        for day_number, (flow_data, precision_data) in sorted((additional_days or {}).items()):
+            if not isinstance(day_number, int) or not 1 <= day_number <= 365 or day_number == 7:
+                raise ValueError("Additional day numbers must be between 1 and 365, excluding Day 7")
+            flow_data.to_excel(writer, index=False, sheet_name=f"day_{day_number}_flow_data")
+            if precision_data is not None:
+                precision_data.to_excel(writer, index=False, sheet_name=f"day_{day_number}_precision_count")
         if gate_names is not None:
             gate_names.to_excel(writer, index=False, sheet_name="name_mapping")
         if metadata is not None: metadata.to_excel(writer, index=False, sheet_name="metadata")

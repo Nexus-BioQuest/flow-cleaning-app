@@ -6,10 +6,10 @@ from typing import Dict, List, Tuple, Optional
 import pandas as pd
 
 class SmartGateNamer:
-    """Automatic plot naming using pattern recognition and rules"""
-    
+    """Apply deterministic rules to gate and metric display names."""
+
     def __init__(self):
-        # Cell type mappings (gate name -> display name)
+        # Cell-type display-name mappings.
         self.cell_type_map = {
             'Total_CD4': 'Total CD4+',
             'Total_CD4_T_Cells': 'Total CD4 T Cells',
@@ -37,8 +37,7 @@ class SmartGateNamer:
             'Plasmablasts': 'Plasmablasts',
             'CD4_TEM': 'CD4+ TEM',
             'CD8_TEM': 'CD8+ TEM',
-            
-            # Memory/Naive/Effector subsets
+
             'CD4_central_memory': 'CD4+ Central Memory',
             'CD4_effector_memory': 'CD4+ Effector Memory',
             'CD4_naive': 'CD4+ Naive',
@@ -48,17 +47,14 @@ class SmartGateNamer:
             'central_memory': 'Central Memory',
             'effector_memory': 'Effector Memory',
             'naive': 'Naive',
-            
-            # Proliferating
+
             'CD4_prolif': 'CD4+ Proliferating',
             'CD8_prolif': 'CD8+ Proliferating',
             'prolif': 'Proliferating',
-            
-            # Viable
+
             'CD45_pos_viable': 'CD45+ Viable',
             'viable': 'Viable',
-            
-            # For direct lookups
+
             'CD4+': 'CD4+',
             'CD4_pos': 'CD4+',
             'CD8+': 'CD8+',
@@ -67,8 +63,8 @@ class SmartGateNamer:
             'CD19-': 'CD19-',
             'Live': 'Viable',
         }
-        
-        # Marker mappings for frequency names
+
+        # Marker mappings for frequency labels.
         self.marker_map = {
             'CD19+': 'CD19+',
             'CD19_pos': 'CD19+',
@@ -96,8 +92,8 @@ class SmartGateNamer:
             'PD1_pos': 'PD1+ Tconv',
             'PD1_neg': 'PD1- Tconv',
         }
-        
-        # Fluorophore to marker mapping for MFI
+
+        # Fluorophore-to-marker mappings for MFI labels.
         self.fluorophore_map = {
             'BB700_CD19-H': 'CD19',
             'BV480_CD20-H': 'CD20',
@@ -120,8 +116,8 @@ class SmartGateNamer:
             'Comp-PE-Cy7_PD1-A': 'PD-1',
             'Comp-PE_CTLA4-A': 'CTLA4',
         }
-        
-        # Special cases that need exact handling
+
+        # Special-case mappings.
         self.special_cases = {
             'Singlets': 'N/A',
             'Beads': 'N/A',
@@ -135,9 +131,9 @@ class SmartGateNamer:
             'singlets/scatter': 'N/A',
             'Singlets/scatter': 'N/A'
         }
-    
+
     def _is_prolif_gate(self, gate_name: str) -> bool:
-        """Returns True only for positive proliferating gates, not Non-Proliferating (e.g. Proliferated-)."""
+        """Return whether a gate denotes positive proliferation."""
         if not gate_name:
             return False
         if gate_name.rstrip().endswith('-'):
@@ -145,17 +141,14 @@ class SmartGateNamer:
         return any(x in gate_name.lower() for x in ['prolif', 'proliferat'])
 
     def _is_non_prolif_gate(self, gate_name: str) -> bool:
-        """Returns True for Non-Proliferating gates (e.g. Proliferated-)."""
+        """Return whether a gate denotes non-proliferation."""
         if not gate_name:
             return False
         return (any(x in gate_name.lower() for x in ['prolif', 'proliferat'])
                 and gate_name.rstrip().endswith('-'))
 
     def _get_non_proliferating_display(self, parts: List[str], context: str = "Cells") -> str:
-        """
-        Generate a proper name for non-proliferating gates.
-        Mirrors _get_proliferating_display but produces "Non-Proliferating <CellType>".
-        """
+        """Format a non-proliferating gate with its parent cell type."""
         last_gate = parts[-1] if parts else ''
         parent_gate = parts[-2] if len(parts) >= 2 else None
         grandparent_gate = parts[-3] if len(parts) >= 3 else None
@@ -174,18 +167,14 @@ class SmartGateNamer:
         return f"Non-Proliferating {parent_cell}{suffix}"
 
     def _get_proliferating_display(self, parts: List[str], context: str = "Cells") -> str:
-        """
-        Generate a proper name for proliferating gates.
-        Always attaches the parent or grandparent cell type (if available).
-        """
+        """Format a proliferating gate with its parent or grandparent cell type."""
         last_gate = parts[-1] if parts else ''
         parent_gate = parts[-2] if len(parts) >= 2 else None
         grandparent_gate = parts[-3] if len(parts) >= 3 else None
 
-        # If the current gate IS "proliferating" OR contains "prolif" (like CD4_prolif)
         if self._is_prolif_gate(last_gate):
             parent_cell = self._lookup_cell_type(parent_gate) if parent_gate else None
-        # If the current gate is under a proliferating gate (e.g. .../proliferating/CD38+)
+
         elif parent_gate and self._is_prolif_gate(parent_gate):
             parent_cell = self._lookup_cell_type(grandparent_gate)
         else:
@@ -197,10 +186,10 @@ class SmartGateNamer:
         if parent_gate == 'Plasmablasts_Cells':
             return "Proliferating Plasmablasts + Plasma"
         elif parent_gate == 'Plasmablasts':
-            # Plasmablasts never gets "Cells" suffix, even with context
+
             return f"Proliferating {parent_cell}"
         elif parent_gate == 'Plasma_cells':
-            # Plasma gets context suffix if provided
+
             if context:
                 return f"Proliferating {parent_cell} {context}"
             else:
@@ -211,7 +200,7 @@ class SmartGateNamer:
 
     def _get_marker_status_display(self, gate_name: str, full_gate_path: str = "") -> Optional[str]:
         """Format marker-positive or negative gates, using the path to disambiguate CD19."""
-        # Clean the gate name (just the last part)
+
         gate_name_clean = gate_name.split('/')[-1] if '/' in gate_name else gate_name
 
         compact_markers = re.findall(
@@ -228,8 +217,8 @@ class SmartGateNamer:
             ]
             return ''.join(marker_display) if len(marker_display) > 1 else marker_display[0]
 
-        # Accept common FlowJo/user variants such as CD86 positive, CD86_pos,
-        # CD86pos and CD86⁺ without maintaining an exhaustive marker list.
+        # Accept common FlowJo variants, including CD86 positive, CD86_pos,
+
         generic = re.fullmatch(
             r'\s*([A-Za-z][A-Za-z0-9_-]*?)\s*(?:[_\s-]*(pos(?:itive)?|neg(?:ative)?)|([+\-⁺⁻]))\s*',
             gate_name_clean,
@@ -240,20 +229,19 @@ class SmartGateNamer:
             status = generic.group(2) or generic.group(3)
             sign = '+' if str(status).lower().startswith('pos') or status in {'+', '⁺'} else '-'
             return f"{marker}{sign}"
-        
+
         for marker_key, marker_display in self.marker_map.items():
-            # Special handling for CD19 to avoid false matches with "Total_B-cells_CD20-CD19"
+            # Require explicit positive CD19 status to avoid matching negated or composite gate names.
             if 'CD19' in marker_key:
-                # Only match if it's explicitly CD19+ or CD19_pos as the GATE NAME itself
-                # Not if it appears in the middle of a longer gate name
+                # Match explicit positive CD19 status in the gate name only.
+
                 if not (gate_name_clean.lower() in ['cd19+', 'cd19_pos', 'cd19-', 'cd19_neg']):
                     continue
-            
+
             if marker_key.lower() in gate_name_clean.lower():
-                # Remove any existing + or - in the display to avoid duplication
+
                 base_marker = marker_display.rstrip('+--').strip()
 
-                # Check for positive/negative patterns
                 if re.search(r'(_pos|_positive|\+)$', gate_name_clean, re.IGNORECASE):
                     return f"{base_marker}+"
                 elif re.search(r'(_neg|_negative|-|-)$', gate_name_clean, re.IGNORECASE):
@@ -310,14 +298,14 @@ class SmartGateNamer:
         return text
 
     def generate_name(self, gate_path: str, metric: str) -> str:
-        """Main name generator"""
+        """Build a display name from a gate path and metric."""
         gate_path = str(gate_path or '').strip().strip('/')
         metric = self._canonical_metric(metric)
         if gate_path in self.special_cases:
             return 'Not Applicable'
         if gate_path == 'Singlets/Scatter/Live' and metric == 'Freq. of Parent':
             return 'Viable %'
-        
+
         if metric == 'Count':
             result = self._generate_count_name(gate_path)
         elif metric == 'Freq. of Parent':
@@ -336,8 +324,7 @@ class SmartGateNamer:
             result = self._generate_median_name(gate_path, metric)
         else:
             result = f"Unknown metric: {metric}"
-        
-        # Apply title case formatting
+
         return self._apply_title_case(result)
 
     def _generate_count_name(self, gate_path: str) -> str:
@@ -348,9 +335,8 @@ class SmartGateNamer:
         last_gate = parts[-1]
         last_gate_lower = last_gate.lower()
 
-        # Handle marker gates - pass full path for context
         marker_display = self._get_marker_status_display(last_gate, gate_path)
-        
+
         if marker_display:
             parent_gate = parts[-2] if len(parts) >= 2 else None
             parent_marker_display = None
@@ -361,40 +347,29 @@ class SmartGateNamer:
                 return f"{marker_display} {parent_marker_display} Cell Count"
 
             parent_cell = self._lookup_cell_type(parent_gate)
-            
-            # Only Total CD4 T Cells and Total CD8 T Cells use "Count" without "Cell"
-            # All other cells use "Cell Count"
+
             if parent_cell in ['Total CD4 T Cells', 'Total CD8 T Cells']:
                 return f"{marker_display} {parent_cell} Count"
             else:
                 return f"{marker_display} {parent_cell} Cell Count"
 
-        # Handle proliferating gates
         if self._is_prolif_gate(last_gate):
             prolif_display = self._get_proliferating_display(parts, context="")
-            
-            # Check parent gate type
+
             parent_gate = parts[-2] if len(parts) >= 2 else None
-            
-            # Special cases:
-            # - Plasmablasts + Plasma Cells: "Proliferating Plasmablasts + Plasma Cell Count"
-            # - Plasmablasts alone: "Proliferating Plasmablasts Count"
-            # - Total CD4/CD8 T Cells: "Proliferating Total CD4/CD8 T Cell Count"
-            # - All other cells: "Proliferating X Cell Count"
-            
+
             if parent_gate == 'Plasmablasts_Cells':
                 return "Proliferating Plasmablasts + Plasma Cell Count"
             elif parent_gate == 'Plasmablasts':
                 return f"{prolif_display} Count"
             elif parent_gate in ['Total_CD4_T_Cells', 'Total_CD8_T_Cells']:
-                # These already have "T Cells" from lookup, change to singular
+
                 parent_cell = self._lookup_cell_type(parent_gate)
                 parent_singular = parent_cell.replace(' T Cells', ' T Cell')
                 return f"Proliferating {parent_singular} Count"
             else:
                 return f"{prolif_display} Cell Count"
 
-        # Handle non-proliferating gates
         if self._is_non_prolif_gate(last_gate):
             non_prolif_display = self._get_non_proliferating_display(parts, context="")
             parent_gate = parts[-2] if len(parts) >= 2 else None
@@ -405,21 +380,19 @@ class SmartGateNamer:
             else:
                 return f"{non_prolif_display} Cell Count"
 
-        # Standard gates
         cell_type = self._lookup_cell_type(last_gate)
-        
-        # Cell types that should use "Count" (not "Cell Count")
+
         use_count_only = ['Plasmablasts']
-        
+
         if last_gate == 'Plasmablasts_Cells':
             return "Plasmablasts + Plasma Cells Count"
         elif cell_type in use_count_only:
             return f"{cell_type} Count"
         elif cell_type in ['Total CD4 T Cells', 'Total CD8 T Cells']:
-            # Special case: already has "T Cells", change to singular "T Cell Count"
+
             return cell_type.replace(' T Cells', ' T Cell Count')
         else:
-            # All other cell types including Plasma, all B cells, all T cells
+
             return f"{cell_type} Cell Count"
 
     def _generate_freq_parent_name(self, gate_path: str) -> str:
@@ -427,19 +400,16 @@ class SmartGateNamer:
         current_gate = parts[-1]
         parent_gate = parts[-2] if len(parts) >= 2 else None
         grandparent_gate = parts[-3] if len(parts) >= 3 else None
-        
-        # Check if current gate is a marker - pass full path for context
+
         marker_display = self._get_marker_status_display(current_gate, gate_path)
-        
-        # Check if we're in a proliferating context (handle both "prolif" and "Proliferated")
+
         is_under_prolif = parent_gate and self._is_prolif_gate(parent_gate)
         is_under_non_prolif = parent_gate and self._is_non_prolif_gate(parent_gate)
-        
+
         if marker_display:
-            # If parent is proliferating, need to get grandparent for full context
+
             if is_under_prolif:
-                # E.g., .../GC/Proliferated/CD11c+
-                # Should be: "CD11c+ % (of Proliferating GC B Cells)"
+
                 if grandparent_gate:
                     grandparent_cell = self._get_display_name_for_freq(grandparent_gate)
                     return f"{marker_display} % (of Proliferating {grandparent_cell})"
@@ -452,16 +422,14 @@ class SmartGateNamer:
                 else:
                     return f"{marker_display} % (of Non-Proliferating)"
             else:
-                # Normal case: marker under non-proliferating parent
+
                 parent_cell = self._get_display_name_for_freq(parent_gate)
                 return f"{marker_display} % (of {parent_cell})"
-        
-        # Check if current gate is proliferating
+
         if self._is_prolif_gate(current_gate):
             parent_cell = self._get_display_name_for_freq(parent_gate)
             return f"Proliferating % (of {parent_cell})"
-        
-        # Preserve grandparent context for proliferation-status gates.
+
         if is_under_prolif:
             current_cell = self._get_display_name_for_freq(current_gate)
             if grandparent_gate:
@@ -482,54 +450,42 @@ class SmartGateNamer:
         return f"{current_cell} % (of {parent_cell})"
 
     def _generate_freq_grandparent_name(self, gate_path: str) -> str:
-        """
-        Generate frequency name relative to grandparent gate.
-        E.g., for path A/B/C with metric "Freq. of Grandparent":
-        - Current gate: C
-        - Parent gate: B
-        - Grandparent gate: A
-        - Result: "C % (of A)"
-        """
+        """Format a gate frequency relative to its grandparent gate."""
         parts = [p for p in gate_path.split('/') if p]
-        
+
         if len(parts) < 3:
-            # Not enough gates for grandparent, fall back to parent
+
             return self._generate_freq_parent_name(gate_path)
-        
+
         current_gate = parts[-1]
         parent_gate = parts[-2]
         grandparent_gate = parts[-3]
         great_grandparent_gate = parts[-4] if len(parts) >= 4 else None
-        
-        # Check if current gate is a marker
+
         marker_display = self._get_marker_status_display(current_gate, gate_path)
-        
-        # Check if we're in a proliferating context
+
         is_under_prolif = parent_gate and self._is_prolif_gate(parent_gate)
-        
+
         if marker_display:
-            # If parent is proliferating, need to look at great-grandparent
+
             if is_under_prolif:
-                # E.g., .../PreGC/GC/proliferating/CD11c+
-                # Should be: "CD11c+ % (of Proliferating PreGC B Cells)"
+
                 if great_grandparent_gate:
                     great_grandparent_cell = self._get_display_name_for_freq(great_grandparent_gate)
                     return f"{marker_display} % (of Proliferating {great_grandparent_cell})"
                 else:
-                    # Fall back to grandparent
+
                     grandparent_cell = self._get_display_name_for_freq(grandparent_gate)
                     return f"{marker_display} % (of Proliferating {grandparent_cell})"
             else:
-                # Normal case: marker under non-proliferating parent
+
                 grandparent_cell = self._get_display_name_for_freq(grandparent_gate)
                 return f"{marker_display} % (of {grandparent_cell})"
-        
-        # Check if current gate is proliferating
+
         if self._is_prolif_gate(current_gate):
             grandparent_cell = self._get_display_name_for_freq(grandparent_gate)
             return f"Proliferating % (of {grandparent_cell})"
-        
-        # Standard case
+
         grandparent_cell = self._get_display_name_for_freq(grandparent_gate)
         current_cell = self._get_display_name_for_freq(current_gate)
         return f"{current_cell} % (of {grandparent_cell})"
@@ -573,7 +529,7 @@ class SmartGateNamer:
                 compact = re.sub(r'[^a-z0-9]', '', fluorophore.casefold())
                 marker = next((value for key, value in self.fluorophore_map.items()
                                if re.sub(r'[^a-z0-9]', '', key.casefold()) == compact), None)
-                # A dye-only channel cannot be mapped biologically with confidence.
+                # Dye-only channels are not mapped to a biological marker.
                 marker = marker or re.sub(r'^(comp[-_ ]*)', '', fluorophore, flags=re.IGNORECASE)
         else:
             marker = "Unknown"
@@ -626,15 +582,11 @@ class SmartGateNamer:
         return f"{marker} MFI ({cell_type})"
 
     def _lookup_cell_type(self, gate_name: str) -> str:
-        """
-        Look up cell type from gate name.
-        Converts markers with _pos/_neg to MARKER+/MARKER- format.
-        """
+        """Resolve a gate name to a display label."""
         if not gate_name:
             return ''
         gate_clean = gate_name.strip('/')
 
-        # Direct lookup first
         if gate_clean in self.cell_type_map:
             return self.cell_type_map[gate_clean]
 
@@ -646,13 +598,12 @@ class SmartGateNamer:
         normalized_gate = normalize_for_matching(gate_clean)
         gate_tokens = normalized_gate.split()
 
-        # Direct normalized lookup first
         for key, value in self.cell_type_map.items():
             normalized_key = normalize_for_matching(key)
             if normalized_key == normalized_gate:
                 return value
 
-        # Token-aware matching: require whole-token key matches only
+        # Whole-token matching prevents partial key collisions.
         for key, value in self.cell_type_map.items():
             normalized_key = normalize_for_matching(key)
             if not normalized_key:
@@ -663,7 +614,6 @@ class SmartGateNamer:
             if len(key_tokens) <= len(gate_tokens) and all(token in gate_tokens for token in key_tokens):
                 return value
 
-        # Handle compact marker expressions like CD4negCD8neg, CD4pos, CD19neg, etc.
         compact_markers = re.findall(
             r'((?:CD\d+|[A-Z][a-z]*\d*?))(pos|neg|positive|negative)',
             gate_clean,
@@ -676,29 +626,25 @@ class SmartGateNamer:
             ]
             return ' '.join(marker_parts)
 
-        # Convert marker_pos/marker_neg patterns to MARKER+/MARKER-
         def replace_marker(match):
-            marker = match.group(1).upper()  # Uppercase the marker
+            marker = match.group(1).upper()
             status_text = match.group(2).lower()
             status = '+' if 'pos' in status_text else '-'
             return f"{marker}{status}"
 
         result = re.sub(r'([A-Za-z]+\d*)_(pos|neg|positive|negative)', replace_marker, gate_clean, flags=re.IGNORECASE)
 
-        # Clean up underscores and hyphens
         result = result.replace('_', ' ')
         result = re.sub(r'(?<![A-Z\d])-(?![+\-])|(?<![\w\d])-(?=\w)', ' ', result)
 
-        # Exceptions that should stay uppercase
         preserve_upper = {"OX40", "OX40l", "PD1", "CTLA4", "CD8"}
 
-        # Apply title case but preserve MARKER+/MARKER- and exceptions
         words = result.split()
         processed_words = []
         for word in words:
             if re.match(r'^[A-Z]{2,}\d*[\+\-]$', word) or word.upper() in preserve_upper:
                 processed_words.append(word.upper())
-            # Special case for CD8 even if it's Cd8
+
             elif 'cd8' in word.lower():
                 processed_words.append(word.replace('cd8', 'CD8').replace('Cd8', 'CD8').replace('CD8', 'CD8'))
             else:
@@ -710,15 +656,13 @@ class SmartGateNamer:
         if not gate_name:
             return ''
         base_name = self._lookup_cell_type(gate_name)
-        
-        # Cell types that need "Cells" suffix
+
         needs_cells = ['GC B', 'Memory B', 'Naïve B', 'Pre-GC B', 'NK', 'Total B', 'Plasma', 
                        'Tconv', 'Tfh', 'mTfh', 'GC-Tfh', 'PD1+ Tconv', 'PD1- Tconv']
-        
-        # Cell types that should NOT get "Cells" suffix
+
         no_cells = ['Total CD4 T Cells', 'Total CD8 T Cells', 'Total CD4+', 'Total CD4', 
                     'CD4+', 'CD4-', 'CD19-', 'Viable', 'Plasmablasts']
-        
+
         if base_name == 'Total CD4+':
             return 'Total CD4'
         if base_name == 'Total CD4 T Cells':
@@ -737,14 +681,12 @@ class SmartGateNamer:
         if not gate_name:
             return ''
         base_name = self._lookup_cell_type(gate_name)
-        
-        # Cell types that need "Cells" suffix
+
         needs_cells = ['GC B', 'Memory B', 'Naïve B', 'Pre-GC B', 'Total B', 'Plasma',
                        'Tconv', 'Tfh', 'mTfh', 'GC-Tfh', 'PD1+ Tconv', 'PD1- Tconv']
-        
-        # Cell types that should NOT get "Cells" suffix
+
         no_cells = ['Total CD4 T Cells', 'Total CD8 T Cells', 'Total CD4+', 'Plasmablasts']
-        
+
         if base_name == 'Total CD4+':
             return 'Total CD4'
         if base_name == 'Total CD4 T Cells':
@@ -758,7 +700,7 @@ class SmartGateNamer:
         if base_name == 'Plasmablasts + Plasma':
             return 'Plasma Blasts + Plasma Cells'
         return base_name
-    
+
     def _apply_title_case(self, text: str) -> str:
         """
         Apply title case to the text, but preserve:
@@ -766,7 +708,7 @@ class SmartGateNamer:
         - Markers with + or - (CD19+, LILRB1+, etc.)
         - Proper formatting within parentheses
         """
-        # Words that should stay as-is (all caps or specific format)
+
         preserve_words = {
             'CD4+', 'CD8+', 'CD3+', 'CD19+', 'CD20+', 'CD38+', 'CD86+', 
             'CD267+', 'CD11c+', 'LILRB1+', 'CXCR5+', 'GC', 'MFI', 'NK',
@@ -776,67 +718,60 @@ class SmartGateNamer:
             'OX40', 'OX40L', 'PD-1', 'PD1', 'CTLA4', 'HLA-DR',
             'OX40l','OX40l+', 'OX40L+', 'OX40L_pos'
         }
-        
-        # Small words that should stay lowercase (unless first word)
+
         small_words = {'of', 'a', 'an', 'the', 'and', 'or', 'but'}
-        
-        # Handle parentheses separately
+
         parts = []
         current_pos = 0
-        
+
         for match in re.finditer(r'\([^)]+\)', text):
-            # Add text before parentheses
+
             if match.start() > current_pos:
                 before = text[current_pos:match.start()]
                 parts.append(self._capitalize_words(before, preserve_words, small_words))
-            
-            # Process parentheses content
+
             paren_content = match.group(0)
-            # Remove parentheses, process, add back
+
             inner = paren_content[1:-1]
             processed_inner = self._capitalize_words(inner, preserve_words, small_words, in_parens=True)
             parts.append(f"({processed_inner})")
-            
+
             current_pos = match.end()
-        
-        # Add any remaining text
+
         if current_pos < len(text):
             parts.append(self._capitalize_words(text[current_pos:], preserve_words, small_words))
-        
+
         return ''.join(parts)
-    
+
     def _capitalize_words(self, text: str, preserve_words: set, small_words: set, in_parens: bool = False) -> str:
-        """Helper to capitalize words in a text segment"""
         words = text.split(' ')
         result = []
-        
+
         for i, word in enumerate(words):
-            # Skip empty words
+
             if not word:
                 result.append(word)
                 continue
-            
-            # Check if word should be preserved as-is
+
             if word in preserve_words:
                 result.append(word)
-            # Preserve user-supplied marker spelling and all-capital channel names.
+
             elif word.endswith(('+', '-')) or re.fullmatch(r'[A-Z0-9]+(?:-[A-Z0-9]+)+', word):
                 result.append(word)
-            # Check if word starts with preserved abbreviation
+
             elif any(word.startswith(abbr) for abbr in preserve_words):
                 result.append(word)
-            # Check if it's a marker abbreviation pattern (e.g., CD123+)
+
             elif re.match(r'^[A-Z]{2,}\d*[\+\-]?$', word):
                 result.append(word)
-            # Small words stay lowercase (even if first in parentheses, but not if first overall)
+
             elif word.lower() in small_words:
                 result.append(word.lower())
-            # Otherwise, capitalize first letter (handles both lowercase and already capitalized)
+
             else:
                 result.append(word.capitalize())
-        
-        return ' '.join(result)
 
+        return ' '.join(result)
 
 def batch_process_gates(gate_metric_pairs: List[Tuple[str, str]]) -> Dict[str, str]:
     namer = SmartGateNamer()
@@ -846,27 +781,25 @@ def batch_process_gates(gate_metric_pairs: List[Tuple[str, str]]) -> Dict[str, s
         results[key] = namer.generate_name(gate_path, metric)
     return results
 
-
 def create_gate_name_mapping(df: pd.DataFrame, 
                              gate_col: str = 'gate_path',
                              metric_col: str = 'metric') -> pd.DataFrame:
     """Build gate-to-plot mappings with unique display names."""
     namer = SmartGateNamer()
-    
-    # Get unique gate/metric combinations
+
     unique_combos = df[[gate_col, metric_col]].drop_duplicates()
-    
+
     mappings = []
     seen_lowercase = {}
     seen_sources = {}
-    
+
     for _, row in unique_combos.iterrows():
         gate_path = row[gate_col]
         metric = row[metric_col]
-        
+
         original_name = f"{gate_path} | {metric}"
         generated_name = namer.generate_name(gate_path, metric)
-        
+
         source_key = re.sub(r'\s+', ' ', str(gate_path)).strip().strip('/').casefold()
         name_lower = generated_name.lower()
         if name_lower in seen_lowercase and source_key in seen_sources.get(name_lower, set()):
@@ -882,45 +815,42 @@ def create_gate_name_mapping(df: pd.DataFrame,
             final_name = generated_name
             seen_lowercase[name_lower] = generated_name
         seen_sources.setdefault(name_lower, set()).add(source_key)
-        
+
         mappings.append({
             'original_name': original_name,
             'plot_name': final_name,
             'gate_path': gate_path,
             'metric': metric
         })
-    
+
     result_df = pd.DataFrame(mappings)
-    
-    # Report on deduplication
+
     original_count = len(result_df)
     unique_count = result_df['plot_name'].nunique()
-    
+
     if original_count != unique_count:
         print(f"Deduplicated: {original_count} original combinations → {unique_count} unique plot names")
-    
-    return result_df
 
+    return result_df
 
 if __name__ == "__main__":
     namer = SmartGateNamer()
-    
-    # Example gate and metric combinations.
+
     test_cases = [
         ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Plasmablasts_Cells/Plasma_cells/proliferating/CD19+", "Freq. of Parent"),
         ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Plasmablasts_Cells/Plasma_cells/proliferating/CD20+", "Freq. of Parent"),
         ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Pre_GC/GC/CD11c+", "Freq. of Grandparent"),
         ("Singlets/Scatter/Live/CD4-/Total_B-cells_CD20-CD19/Pre_GC/GC/proliferating/CD38+", "Freq. of Grandparent"),
     ]
-    
+
     print("Testing gate naming including frequency of grandparent")
     print("=" * 80)
-    
+
     for gate_path, metric in test_cases:
         result = namer.generate_name(gate_path, metric)
         print(f"Metric: {metric}")
         print(f"Input:  {gate_path}")
         print(f"Result: {result}")
         print()
-    
+
     print("=" * 80)

@@ -71,3 +71,42 @@ def test_column_mismatch_is_one_summary_row_even_when_many_columns_differ():
     mismatch = findings[findings["Check"] == "Column structure"]
     assert len(mismatch) == 1
     assert mismatch.iloc[0]["Affected"] == 600
+
+
+def test_additional_days_are_included_in_individual_and_column_validation():
+    day_0 = pd.DataFrame({
+        "sample_name": ["S1", "S2"],
+        "Gate | Frequency": [0.2, 0.4],
+        "Gate | Count": [10, 20],
+    })
+    day_7 = day_0.copy()
+    day_14 = pd.DataFrame({
+        "sample_name": ["S1", "S1"],
+        "Gate | Frequency": [-1, 101],
+        "Other | Count": [10, 20],
+    })
+    precision = pd.DataFrame({"recorded_bead_count": [0, 1000]})
+
+    results = run_checks(
+        day_0,
+        day_7,
+        additional_days={14: (day_14, precision)},
+    )
+    findings = build_findings(results)
+
+    assert "day_14_samples" in results
+    assert "day_14_frequency" in results
+    assert "day_14_precision" in results
+    day_14_findings = findings[findings["Dataset"] == "Day 14"]
+    assert {"Sample names", "Frequency values", "Precision counts"}.issubset(
+        set(day_14_findings["Check"])
+    )
+    column_findings = findings[findings["Check"] == "Column structure"]
+    assert "Day 0 vs Day 14" in set(column_findings["Dataset"])
+
+
+def test_extract_additional_days_reads_metadata_day_column():
+    from flow_cleaning.ui.metadata_tab import extract_additional_days
+    frame = pd.DataFrame({'Day': [0, 7, 14, 'Day 21', 14, None]})
+    assert extract_additional_days(frame) == [14, 21]
+    assert extract_additional_days(pd.DataFrame({'sample_name': ['a']})) == []
